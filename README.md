@@ -1,0 +1,2 @@
+# CompetitionOverlay
+CompetitionOverlay OSRS plugin

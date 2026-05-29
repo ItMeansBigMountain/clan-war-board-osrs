@@ -1,0 +1,13 @@
+{
+  "name": "CompetitionOverlay",
+  "version": "1.0.0",
+  "description": "shows current competition standings and progress",
+  "author": "Affan Fareed",
+  "tags": [
+    "osrs",
+    "runelite",
+    "plugin",
+    "competitionoverlay"
+  ],
+  "min_engine_version": "3.0.0"
+}
