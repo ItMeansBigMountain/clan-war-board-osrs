@@ -14,10 +14,14 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 @Slf4j
 @PluginDescriptor(
-	name = "CompetitionOverlay"
+	name = CompetitionOverlayPlugin.PLUGIN_NAME,
+	description = "Shows OSRS competition reminders and standing/status placeholders.",
+	tags = {"competition", "overlay", "clan", "runelite"}
 )
 public class CompetitionOverlayPlugin extends Plugin
 {
+	static final String PLUGIN_NAME = "Competition Overlay";
+
 	@Inject
 	private Client client;
 
@@ -25,24 +29,29 @@ public class CompetitionOverlayPlugin extends Plugin
 	private CompetitionOverlayConfig config;
 
 	@Override
-	protected void startUp() throws Exception
+	protected void startUp()
 	{
-		log.debug("CompetitionOverlay started!");
+		log.debug("{} started", PLUGIN_NAME);
 	}
 
 	@Override
-	protected void shutDown() throws Exception
+	protected void shutDown()
 	{
-		log.debug("CompetitionOverlay stopped!");
+		log.debug("{} stopped", PLUGIN_NAME);
 	}
 
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged gameStateChanged)
 	{
-		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
+		if (gameStateChanged.getGameState() == GameState.LOGGED_IN && config.showLoginMessage())
 		{
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "CompetitionOverlay says " + config.greeting(), null);
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", buildLoginMessage(config), null);
 		}
+	}
+
+	static String buildLoginMessage(CompetitionOverlayConfig config)
+	{
+		return PLUGIN_NAME + ": " + config.competitionName() + " - " + config.statusMessage();
 	}
 
 	@Provides

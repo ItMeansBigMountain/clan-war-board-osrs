@@ -1,13 +1,14 @@
 {
-  "name": "CompetitionOverlay",
+  "name": "Competition Overlay",
   "version": "1.0.0",
-  "description": "shows current competition standings and progress",
-  "author": "Affan Fareed",
+  "description": "Shows OSRS competition reminders and standing/status placeholders.",
+  "author": "Oyama",
   "tags": [
     "osrs",
     "runelite",
-    "plugin",
-    "competitionoverlay"
+    "competition",
+    "overlay",
+    "clan"
   ],
   "min_engine_version": "3.0.0"
 }
