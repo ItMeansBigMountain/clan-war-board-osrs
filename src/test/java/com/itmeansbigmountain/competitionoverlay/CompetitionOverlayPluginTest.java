@@ -2,6 +2,7 @@ package com.itmeansbigmountain.competitionoverlay;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import net.runelite.client.RuneLite;
@@ -13,13 +14,13 @@ import org.junit.Test;
 public class CompetitionOverlayPluginTest
 {
 	@Test
-	public void pluginDescriptorMatchesPluginHubMetadata()
+	public void pluginDescriptorMatchesClanWarBoardDirection()
 	{
 		PluginDescriptor descriptor = CompetitionOverlayPlugin.class.getAnnotation(PluginDescriptor.class);
 
-		assertEquals("Competition Overlay", descriptor.name());
-		assertEquals("Shows OSRS competition reminders and standing/status placeholders.", descriptor.description());
-		assertArrayEquals(new String[] {"competition", "overlay", "clan", "runelite"}, descriptor.tags());
+		assertEquals("Clan War Board", descriptor.name());
+		assertEquals("Lets clan leaders set up wilderness fights while members see the current war board.", descriptor.description());
+		assertArrayEquals(new String[] {"clan", "war", "pvp", "wilderness"}, descriptor.tags());
 	}
 
 	@Test
@@ -29,30 +30,59 @@ public class CompetitionOverlayPluginTest
 		CompetitionOverlayConfig config = new CompetitionOverlayConfig() {};
 
 		assertEquals("competitionoverlay", group.value());
-		assertEquals("Clan Competition", config.competitionName());
+		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
+		assertEquals("Weekend Wilderness War", config.warName());
+		assertEquals("Rival Clan", config.opponentClan());
+		assertEquals("Saturday 8 PM EST", config.warDate());
+		assertEquals("330", config.warWorld());
+		assertEquals("Lava Dragons", config.hotspot());
+		assertEquals("Multi only. Returns allowed. Hold the hotspot.", config.rules());
 		assertTrue(config.showLoginMessage());
-		assertEquals("Open the Competition Overlay panel for current standings.", config.statusMessage());
 	}
 
 	@Test
-	public void loginMessageUsesConfiguredCompetitionAndStatus()
+	public void clanRankGateSeparatesLeadersFromMembers()
+	{
+		assertTrue(new ClanAccess("Oyama", "TRAPISTAN", 126).canManageWars(LeaderMinimumRank.ADMINISTRATOR));
+		assertTrue(new ClanAccess("Deputy", "TRAPISTAN", 125).canManageWars(LeaderMinimumRank.DEPUTY_OWNER));
+		assertFalse(new ClanAccess("Member", "TRAPISTAN", 50).canManageWars(LeaderMinimumRank.ADMINISTRATOR));
+		assertFalse(ClanAccess.noClan("Solo").canManageWars(LeaderMinimumRank.ADMINISTRATOR));
+	}
+
+	@Test
+	public void loginMessageUsesWarDetailsAndRankMode()
 	{
 		CompetitionOverlayConfig config = new CompetitionOverlayConfig()
 		{
 			@Override
-			public String competitionName()
+			public String warName()
 			{
-				return "Bingo Week";
+				return "Lava Dragon War";
 			}
 
 			@Override
-			public String statusMessage()
+			public String opponentClan()
 			{
-				return "Team A leads by 42 points";
+				return "Rival Clan";
+			}
+
+			@Override
+			public String hotspot()
+			{
+				return "Lava Dragons";
+			}
+
+			@Override
+			public String warWorld()
+			{
+				return "330";
 			}
 		};
 
-		assertEquals("Competition Overlay: Bingo Week - Team A leads by 42 points", CompetitionOverlayPlugin.buildLoginMessage(config));
+		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (leader setup unlocked)",
+			CompetitionOverlayPlugin.buildLoginMessage(config, new ClanAccess("Oyama", "TRAPISTAN", 100)));
+		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (member view)",
+			CompetitionOverlayPlugin.buildLoginMessage(config, new ClanAccess("Member", "TRAPISTAN", 50)));
 	}
 
 	public static void main(String[] args) throws Exception

@@ -1,14 +1,15 @@
 {
-  "name": "Competition Overlay",
+  "name": "Clan War Board",
   "version": "1.0.0",
-  "description": "Shows OSRS competition reminders and standing/status placeholders.",
+  "description": "Lets clan leaders set up wilderness fights while members see the current war board.",
   "author": "Oyama",
   "tags": [
     "osrs",
     "runelite",
-    "competition",
-    "overlay",
-    "clan"
+    "clan",
+    "war",
+    "pvp",
+    "wilderness"
   ],
   "min_engine_version": "3.0.0"
 }

@@ -8,39 +8,98 @@ import net.runelite.client.config.ConfigItem;
 public interface CompetitionOverlayConfig extends Config
 {
 	String CONFIG_GROUP = "competitionoverlay";
-	String DEFAULT_COMPETITION_NAME = "Clan Competition";
-	String DEFAULT_STATUS_MESSAGE = "Open the Competition Overlay panel for current standings.";
+	String DEFAULT_WAR_NAME = "Weekend Wilderness War";
+	String DEFAULT_OPPONENT_CLAN = "Rival Clan";
+	String DEFAULT_WAR_DATE = "Saturday 8 PM EST";
+	String DEFAULT_WORLD = "330";
+	String DEFAULT_HOTSPOT = "Lava Dragons";
+	String DEFAULT_RULES = "Multi only. Returns allowed. Hold the hotspot.";
 
 	@ConfigItem(
-		keyName = "competitionName",
-		name = "Competition Name",
-		description = "Name of the competition to reference in login/status messages",
+		keyName = "minimumLeaderRank",
+		name = "Leader Rank Needed",
+		description = "Minimum clan rank required to create/edit clan war plans in the panel",
 		position = 0
 	)
-	default String competitionName()
+	default LeaderMinimumRank minimumLeaderRank()
 	{
-		return DEFAULT_COMPETITION_NAME;
+		return LeaderMinimumRank.ADMINISTRATOR;
+	}
+
+	@ConfigItem(
+		keyName = "warName",
+		name = "War Name",
+		description = "Name of the planned clan war",
+		position = 1
+	)
+	default String warName()
+	{
+		return DEFAULT_WAR_NAME;
+	}
+
+	@ConfigItem(
+		keyName = "opponentClan",
+		name = "Opponent Clan",
+		description = "Clan you are setting up the fight against",
+		position = 2
+	)
+	default String opponentClan()
+	{
+		return DEFAULT_OPPONENT_CLAN;
+	}
+
+	@ConfigItem(
+		keyName = "warDate",
+		name = "Date / Time",
+		description = "When the fight is planned",
+		position = 3
+	)
+	default String warDate()
+	{
+		return DEFAULT_WAR_DATE;
+	}
+
+	@ConfigItem(
+		keyName = "warWorld",
+		name = "World",
+		description = "World for the fight",
+		position = 4
+	)
+	default String warWorld()
+	{
+		return DEFAULT_WORLD;
+	}
+
+	@ConfigItem(
+		keyName = "hotspot",
+		name = "Hotspot",
+		description = "Wilderness hotspot or meeting zone for the fight",
+		position = 5
+	)
+	default String hotspot()
+	{
+		return DEFAULT_HOTSPOT;
+	}
+
+	@ConfigItem(
+		keyName = "rules",
+		name = "Rules / Notes",
+		description = "Short rules, gear, and return notes shown to members",
+		position = 6
+	)
+	default String rules()
+	{
+		return DEFAULT_RULES;
 	}
 
 	@ConfigItem(
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
-		description = "Show a short Competition Overlay reminder after logging in",
-		position = 1
+		description = "Show a short Clan War Board reminder after logging in",
+		position = 7
 	)
 	default boolean showLoginMessage()
 	{
 		return true;
-	}
-
-	@ConfigItem(
-		keyName = "statusMessage",
-		name = "Status Message",
-		description = "Short status text displayed in the login reminder until live standings are wired in",
-		position = 2
-	)
-	default String statusMessage()
-	{
-		return DEFAULT_STATUS_MESSAGE;
 	}
 }
