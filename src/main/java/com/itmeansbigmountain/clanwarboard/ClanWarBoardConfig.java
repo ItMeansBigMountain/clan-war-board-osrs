@@ -1,13 +1,13 @@
-package com.itmeansbigmountain.competitionoverlay;
+package com.itmeansbigmountain.clanwarboard;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
-@ConfigGroup(CompetitionOverlayConfig.CONFIG_GROUP)
-public interface CompetitionOverlayConfig extends Config
+@ConfigGroup(ClanWarBoardConfig.CONFIG_GROUP)
+public interface ClanWarBoardConfig extends Config
 {
-	String CONFIG_GROUP = "competitionoverlay";
+	String CONFIG_GROUP = "clanwarboard";
 	String DEFAULT_WAR_NAME = "Weekend Wilderness War";
 	String DEFAULT_OPPONENT_CLAN = "Rival Clan";
 	String DEFAULT_WAR_DATE = "Saturday 8 PM EST";

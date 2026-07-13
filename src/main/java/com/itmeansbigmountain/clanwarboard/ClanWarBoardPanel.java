@@ -1,4 +1,4 @@
-package com.itmeansbigmountain.competitionoverlay;
+package com.itmeansbigmountain.clanwarboard;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -15,7 +15,7 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import net.runelite.client.ui.PluginPanel;
 
-class CompetitionOverlayPanel extends PluginPanel
+class ClanWarBoardPanel extends PluginPanel
 {
 	private static final int CONTENT_WIDTH = PluginPanel.PANEL_WIDTH - PluginPanel.SCROLLBAR_WIDTH - (PluginPanel.BORDER_OFFSET * 2) - 8;
 	private static final Color PANEL_BG = new Color(36, 32, 28);
@@ -27,7 +27,7 @@ class CompetitionOverlayPanel extends PluginPanel
 
 	private final JPanel content = new JPanel();
 
-	CompetitionOverlayPanel()
+	ClanWarBoardPanel()
 	{
 		super(false);
 		setLayout(new BorderLayout());
@@ -40,7 +40,7 @@ class CompetitionOverlayPanel extends PluginPanel
 		add(scrollPane, BorderLayout.CENTER);
 	}
 
-	void update(CompetitionOverlayConfig config, String clanName, String playerName, String rankName, boolean leader)
+	void update(ClanWarBoardConfig config, String clanName, String playerName, String rankName, boolean leader)
 	{
 		content.removeAll();
 		addTitle("Clan War Board");
@@ -64,7 +64,7 @@ class CompetitionOverlayPanel extends PluginPanel
 		content.repaint();
 	}
 
-	private void addLeaderTools(CompetitionOverlayConfig config)
+	private void addLeaderTools(ClanWarBoardConfig config)
 	{
 		addCard("Fight setup", new String[] {
 			"War: " + clean(config.warName(), "Unnamed war"),
@@ -82,7 +82,7 @@ class CompetitionOverlayPanel extends PluginPanel
 		addCard("Rules / notes", new String[] {clean(config.rules(), "No rules set.")}, MUTED);
 	}
 
-	private void addMemberView(CompetitionOverlayConfig config)
+	private void addMemberView(ClanWarBoardConfig config)
 	{
 		addCard("Upcoming fight", new String[] {
 			clean(config.warName(), "No war configured"),

@@ -1,4 +1,4 @@
-package com.itmeansbigmountain.competitionoverlay;
+package com.itmeansbigmountain.clanwarboard;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
@@ -23,11 +23,11 @@ import net.runelite.client.ui.NavigationButton;
 
 @Slf4j
 @PluginDescriptor(
-	name = CompetitionOverlayPlugin.PLUGIN_NAME,
+	name = ClanWarBoardPlugin.PLUGIN_NAME,
 	description = "Lets clan leaders set up wilderness fights while members see the current war board.",
 	tags = {"clan", "war", "pvp", "wilderness"}
 )
-public class CompetitionOverlayPlugin extends Plugin
+public class ClanWarBoardPlugin extends Plugin
 {
 	static final String PLUGIN_NAME = "Clan War Board";
 
@@ -38,15 +38,15 @@ public class CompetitionOverlayPlugin extends Plugin
 	private ClientToolbar clientToolbar;
 
 	@Inject
-	private CompetitionOverlayConfig config;
+	private ClanWarBoardConfig config;
 
-	private CompetitionOverlayPanel panel;
+	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
 
 	@Override
 	protected void startUp()
 	{
-		panel = new CompetitionOverlayPanel();
+		panel = new ClanWarBoardPanel();
 		navButton = NavigationButton.builder()
 			.tooltip(PLUGIN_NAME)
 			.icon(loadIcon())
@@ -113,7 +113,7 @@ public class CompetitionOverlayPlugin extends Plugin
 		return local == null ? null : local.getName();
 	}
 
-	static String buildLoginMessage(CompetitionOverlayConfig config, ClanAccess access)
+	static String buildLoginMessage(ClanWarBoardConfig config, ClanAccess access)
 	{
 		String mode = access.canManageWars(config.minimumLeaderRank()) ? "leader setup unlocked" : "member view";
 		return PLUGIN_NAME + ": " + config.warName() + " vs " + config.opponentClan() + " at " + config.hotspot() + " on world " + config.warWorld() + " (" + mode + ")";
@@ -121,7 +121,7 @@ public class CompetitionOverlayPlugin extends Plugin
 
 	private static BufferedImage loadIcon()
 	{
-		try (InputStream stream = CompetitionOverlayPlugin.class.getResourceAsStream("/icon.png"))
+		try (InputStream stream = ClanWarBoardPlugin.class.getResourceAsStream("/icon.png"))
 		{
 			if (stream != null)
 			{
@@ -136,8 +136,8 @@ public class CompetitionOverlayPlugin extends Plugin
 	}
 
 	@Provides
-	CompetitionOverlayConfig provideConfig(ConfigManager configManager)
+	ClanWarBoardConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(CompetitionOverlayConfig.class);
+		return configManager.getConfig(ClanWarBoardConfig.class);
 	}
 }

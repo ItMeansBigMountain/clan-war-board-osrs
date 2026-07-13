@@ -1,4 +1,4 @@
-# CompetitionOverlay Developer Cheat Sheet
+# ClanWarBoard Developer Cheat Sheet
 
 Quick commands for testing this RuneLite external plugin locally.
 
@@ -7,13 +7,13 @@ Quick commands for testing this RuneLite external plugin locally.
 Run every command from this repo root:
 
 ```bash
-cd CompetitionOverlay
+cd ClanWarBoard
 ```
 
 If you cloned the whole HeRmEz workspace with submodules, the path is usually:
 
 ```bash
-cd HeRmEz/projects/osrs-plugins/CompetitionOverlay
+cd HeRmEz/projects/osrs-plugins/ClanWarBoard
 ```
 
 ## 1. Java requirement
@@ -223,7 +223,7 @@ If this repo is checked out as a HeRmEz submodule, update the parent repo after 
 
 ```bash
 cd ../../..
-git add projects/osrs-plugins/CompetitionOverlay
-git commit -m "chore: update CompetitionOverlay submodule"
+git add projects/osrs-plugins/ClanWarBoard
+git commit -m "chore: update ClanWarBoard submodule"
 git push origin main
 ```

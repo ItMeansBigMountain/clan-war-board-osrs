@@ -1,4 +1,4 @@
-package com.itmeansbigmountain.competitionoverlay;
+package com.itmeansbigmountain.clanwarboard;
 
 class ClanAccess
 {

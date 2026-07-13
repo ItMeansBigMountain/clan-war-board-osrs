@@ -1,4 +1,4 @@
-package com.itmeansbigmountain.competitionoverlay;
+package com.itmeansbigmountain.clanwarboard;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -11,12 +11,12 @@ import net.runelite.client.externalplugins.ExternalPluginManager;
 import net.runelite.client.plugins.PluginDescriptor;
 import org.junit.Test;
 
-public class CompetitionOverlayPluginTest
+public class ClanWarBoardPluginTest
 {
 	@Test
 	public void pluginDescriptorMatchesClanWarBoardDirection()
 	{
-		PluginDescriptor descriptor = CompetitionOverlayPlugin.class.getAnnotation(PluginDescriptor.class);
+		PluginDescriptor descriptor = ClanWarBoardPlugin.class.getAnnotation(PluginDescriptor.class);
 
 		assertEquals("Clan War Board", descriptor.name());
 		assertEquals("Lets clan leaders set up wilderness fights while members see the current war board.", descriptor.description());
@@ -26,10 +26,10 @@ public class CompetitionOverlayPluginTest
 	@Test
 	public void configGroupAndDefaultsAreStable()
 	{
-		ConfigGroup group = CompetitionOverlayConfig.class.getAnnotation(ConfigGroup.class);
-		CompetitionOverlayConfig config = new CompetitionOverlayConfig() {};
+		ConfigGroup group = ClanWarBoardConfig.class.getAnnotation(ConfigGroup.class);
+		ClanWarBoardConfig config = new ClanWarBoardConfig() {};
 
-		assertEquals("competitionoverlay", group.value());
+		assertEquals("clanwarboard", group.value());
 		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
 		assertEquals("Weekend Wilderness War", config.warName());
 		assertEquals("Rival Clan", config.opponentClan());
@@ -52,7 +52,7 @@ public class CompetitionOverlayPluginTest
 	@Test
 	public void loginMessageUsesWarDetailsAndRankMode()
 	{
-		CompetitionOverlayConfig config = new CompetitionOverlayConfig()
+		ClanWarBoardConfig config = new ClanWarBoardConfig()
 		{
 			@Override
 			public String warName()
@@ -80,14 +80,14 @@ public class CompetitionOverlayPluginTest
 		};
 
 		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (leader setup unlocked)",
-			CompetitionOverlayPlugin.buildLoginMessage(config, new ClanAccess("Oyama", "TRAPISTAN", 100)));
+			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Oyama", "TRAPISTAN", 100)));
 		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (member view)",
-			CompetitionOverlayPlugin.buildLoginMessage(config, new ClanAccess("Member", "TRAPISTAN", 50)));
+			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Member", "TRAPISTAN", 50)));
 	}
 
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(CompetitionOverlayPlugin.class);
+		ExternalPluginManager.loadBuiltin(ClanWarBoardPlugin.class);
 		RuneLite.main(args);
 	}
 }
