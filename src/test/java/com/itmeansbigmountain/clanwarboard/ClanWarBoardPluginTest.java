@@ -37,6 +37,7 @@ public class ClanWarBoardPluginTest
 		assertEquals("330", config.warWorld());
 		assertEquals("Lava Dragons", config.hotspot());
 		assertEquals("Multi only. Returns allowed. Hold the hotspot.", config.rules());
+		assertFalse(config.publicPlayerTracking());
 		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, config.serviceUrl());
 		assertTrue(config.showLoginMessage());
 	}
@@ -92,6 +93,33 @@ public class ClanWarBoardPluginTest
 		assertEquals("https://example.com", ClanWarBoardApiClient.normalizeBaseUrl("https://example.com///"));
 		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, ClanWarBoardApiClient.normalizeBaseUrl(" "));
 		assertEquals(2, ClanWarBoardApiClient.countOccurrences("{\"clan_id\":1},{\"clan_id\":2}", "\"clan_id\""));
+	}
+
+	@Test
+	public void telemetryEventsRespectWebsitePrivacy()
+	{
+		ClanWarBoardTelemetryEvent privateEvent = new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy", 31, 330, 123, 456L, false);
+		ClanWarBoardTelemetryEvent publicEvent = new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy", 31, 330, 123, 456L, true);
+
+		assertTrue(privateEvent.toJson().contains("\"playerName\":\"private\""));
+		assertFalse(privateEvent.toJson().contains("Oyama"));
+		assertTrue(publicEvent.toJson().contains("\"playerName\":\"Oyama\""));
+		assertTrue(privateEvent.toJson().contains("\"world\":330"));
+	}
+
+	@Test
+	public void telemetryBufferBatchesAndThrottles()
+	{
+		ClanWarBoardTelemetryBuffer buffer = new ClanWarBoardTelemetryBuffer();
+		assertTrue(buffer.shouldHeartbeat(100));
+		assertFalse(buffer.shouldHeartbeat(150));
+		for (int i = 0; i < ClanWarBoardTelemetryBuffer.MAX_EVENTS_PER_BATCH + 1; i++)
+		{
+			buffer.add(new ClanWarBoardTelemetryEvent("heartbeat", "Oyama", "TRAPISTAN", null, 0, 330, i, i, false));
+		}
+		assertTrue(buffer.shouldFlush(1L));
+		assertEquals(ClanWarBoardTelemetryBuffer.MAX_EVENTS_PER_BATCH, buffer.drain(1L).size());
+		assertEquals(1, buffer.size());
 	}
 
 	public static void main(String[] args) throws Exception

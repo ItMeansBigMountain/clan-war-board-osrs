@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 
 final class ClanWarBoardApiClient
 {
@@ -39,6 +40,26 @@ final class ClanWarBoardApiClient
 		return ClanWarBoardApiStatus.online("Connected to Clan War Board", countOccurrences(clans, "\"clan_id\""), countOccurrences(availability, "\"creatorClanName\""));
 	}
 
+	void submitTelemetry(String baseUrl, List<ClanWarBoardTelemetryEvent> events) throws IOException, InterruptedException
+	{
+		if (events == null || events.isEmpty())
+		{
+			return;
+		}
+		StringBuilder payload = new StringBuilder();
+		payload.append("{\"schemaVersion\":1,\"events\":[");
+		for (int i = 0; i < events.size(); i++)
+		{
+			if (i > 0)
+			{
+				payload.append(',');
+			}
+			payload.append(events.get(i).toJson());
+		}
+		payload.append("]}");
+		post(normalizeBaseUrl(baseUrl) + "/api/plugin/events/batch", payload.toString());
+	}
+
 	private String get(String url) throws IOException, InterruptedException
 	{
 		HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -47,6 +68,24 @@ final class ClanWarBoardApiClient
 			.header("User-Agent", USER_AGENT)
 			.header("X-Clan-War-Board-Client", "runelite")
 			.GET()
+			.build();
+		HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+		if (response.statusCode() < 200 || response.statusCode() >= 300)
+		{
+			throw new IOException("Clan War Board API returned HTTP " + response.statusCode());
+		}
+		return response.body();
+	}
+
+	private String post(String url, String json) throws IOException, InterruptedException
+	{
+		HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+			.timeout(TIMEOUT)
+			.header("Accept", "application/json")
+			.header("Content-Type", "application/json")
+			.header("User-Agent", USER_AGENT)
+			.header("X-Clan-War-Board-Client", "runelite")
+			.POST(HttpRequest.BodyPublishers.ofString(json))
 			.build();
 		HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 		if (response.statusCode() < 200 || response.statusCode() >= 300)

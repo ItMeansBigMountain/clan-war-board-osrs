@@ -94,10 +94,21 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "publicPlayerTracking",
+		name = "Show My Player Stats Publicly",
+		description = "If enabled, your player name can appear on public Clan War Board website performance pages. If disabled, war telemetry still syncs but public website player tracking is private.",
+		position = 7
+	)
+	default boolean publicPlayerTracking()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "serviceUrl",
 		name = "Service URL",
-		description = "Clan War Board service base URL used for required online sync, clan lookup, and public fight board data",
-		position = 7
+		description = "Clan War Board service base URL used for required online sync, clan lookup, fight telemetry, and public fight board data",
+		position = 8
 	)
 	default String serviceUrl()
 	{
@@ -108,7 +119,7 @@ public interface ClanWarBoardConfig extends Config
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
 		description = "Show a short Clan War Board reminder after logging in",
-		position = 8
+		position = 9
 	)
 	default boolean showLoginMessage()
 	{

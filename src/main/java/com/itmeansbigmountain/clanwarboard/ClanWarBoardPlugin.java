@@ -4,6 +4,7 @@ import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
@@ -13,9 +14,12 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
+import net.runelite.api.events.ActorDeath;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
-import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -45,6 +49,7 @@ public class ClanWarBoardPlugin extends Plugin
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
 	private final ClanWarBoardApiClient apiClient = new ClanWarBoardApiClient();
+	private final ClanWarBoardTelemetryBuffer telemetryBuffer = new ClanWarBoardTelemetryBuffer();
 	private ClanWarBoardApiStatus apiStatus = ClanWarBoardApiStatus.offline("Online Sync has not refreshed yet");
 
 	@Override
@@ -86,6 +91,69 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 	}
 
+	@Subscribe
+	public void onGameTick(GameTick tick)
+	{
+		int currentTick = client.getTickCount();
+		ClanAccess access = clanAccess();
+		if (telemetryBuffer.shouldHeartbeat(currentTick))
+		{
+			queueTelemetry("heartbeat", null, 0, access);
+		}
+		flushTelemetryIfReady();
+	}
+
+	@Subscribe
+	public void onHitsplatApplied(HitsplatApplied event)
+	{
+		if (!(event.getActor() instanceof Player) || event.getHitsplat() == null)
+		{
+			return;
+		}
+		int amount = event.getHitsplat().getAmount();
+		if (amount <= 0)
+		{
+			return;
+		}
+		Player local = client.getLocalPlayer();
+		Player target = (Player) event.getActor();
+		if (local == null || target.getName() == null)
+		{
+			return;
+		}
+		ClanAccess access = clanAccess();
+		if (target == local)
+		{
+			queueTelemetry("damage_taken", null, amount, access);
+		}
+		else if (event.getHitsplat().isMine())
+		{
+			queueTelemetry("damage_dealt", target.getName(), amount, access);
+		}
+	}
+
+	@Subscribe
+	public void onActorDeath(ActorDeath event)
+	{
+		if (!(event.getActor() instanceof Player))
+		{
+			return;
+		}
+		Player local = client.getLocalPlayer();
+		Player dead = (Player) event.getActor();
+		ClanAccess access = clanAccess();
+		if (local != null && dead == local)
+		{
+			queueTelemetry("death", null, 1, access);
+			flushTelemetryNow();
+		}
+		else if (dead.getName() != null)
+		{
+			queueTelemetry("kill_candidate", dead.getName(), 1, access);
+			flushTelemetryNow();
+		}
+	}
+
 	private void refreshPanel()
 	{
 		if (panel == null)
@@ -118,6 +186,59 @@ public class ClanWarBoardPlugin extends Plugin
 			apiStatus = status;
 			refreshPanel();
 		}));
+	}
+
+	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access)
+	{
+		telemetryBuffer.add(new ClanWarBoardTelemetryEvent(
+			type,
+			access.getPlayerName(),
+			access.getClanName(),
+			opponentName,
+			amount,
+			client.getWorld(),
+			client.getTickCount(),
+			System.currentTimeMillis(),
+			config.publicPlayerTracking()
+		));
+	}
+
+	private void flushTelemetryIfReady()
+	{
+		long now = System.currentTimeMillis();
+		if (telemetryBuffer.shouldFlush(now))
+		{
+			flushTelemetry(now);
+		}
+	}
+
+	private void flushTelemetryNow()
+	{
+		flushTelemetry(System.currentTimeMillis());
+	}
+
+	private void flushTelemetry(long now)
+	{
+		List<ClanWarBoardTelemetryEvent> batch = telemetryBuffer.drain(now);
+		if (batch.isEmpty())
+		{
+			return;
+		}
+		CompletableFuture.runAsync(() ->
+		{
+			try
+			{
+				apiClient.submitTelemetry(config.serviceUrl(), batch);
+			}
+			catch (IOException | InterruptedException ex)
+			{
+				if (ex instanceof InterruptedException)
+				{
+					Thread.currentThread().interrupt();
+				}
+				log.debug("Clan War Board telemetry upload failed", ex);
+			}
+		});
 	}
 
 	private ClanAccess clanAccess()
