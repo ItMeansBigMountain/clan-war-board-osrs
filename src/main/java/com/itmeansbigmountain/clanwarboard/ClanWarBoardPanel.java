@@ -67,14 +67,6 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void addOnlineCard(ClanWarBoardConfig config, ClanWarBoardApiStatus apiStatus)
 	{
-		if (!config.enableOnlineSync())
-		{
-			addCard("Online board", new String[] {
-				"Online Sync is off.",
-				"Enable it in config to load public clans and open fights from the Clan War Board service."
-			}, MUTED);
-			return;
-		}
 		ClanWarBoardApiStatus status = apiStatus == null ? ClanWarBoardApiStatus.offline("Waiting for service refresh") : apiStatus;
 		addCard("Online board", new String[] {
 			status.isOnline() ? "Status: connected" : "Status: unavailable",

@@ -94,21 +94,10 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "enableOnlineSync",
-		name = "Enable Online Sync",
-		description = "Connect to the Clan War Board service. Sends requests with plugin version headers; future write endpoints may send display name, clan name, rank, leader actions, and fight telemetry.",
-		position = 7
-	)
-	default boolean enableOnlineSync()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 		keyName = "serviceUrl",
 		name = "Service URL",
-		description = "Clan War Board service base URL used for online clan lookup and public fight board data",
-		position = 8
+		description = "Clan War Board service base URL used for required online sync, clan lookup, and public fight board data",
+		position = 7
 	)
 	default String serviceUrl()
 	{
@@ -119,7 +108,7 @@ public interface ClanWarBoardConfig extends Config
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
 		description = "Show a short Clan War Board reminder after logging in",
-		position = 9
+		position = 8
 	)
 	default boolean showLoginMessage()
 	{

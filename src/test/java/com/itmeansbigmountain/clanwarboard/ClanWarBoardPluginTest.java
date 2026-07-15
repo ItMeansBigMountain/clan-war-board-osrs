@@ -37,7 +37,6 @@ public class ClanWarBoardPluginTest
 		assertEquals("330", config.warWorld());
 		assertEquals("Lava Dragons", config.hotspot());
 		assertEquals("Multi only. Returns allowed. Hold the hotspot.", config.rules());
-		assertFalse(config.enableOnlineSync());
 		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, config.serviceUrl());
 		assertTrue(config.showLoginMessage());
 	}

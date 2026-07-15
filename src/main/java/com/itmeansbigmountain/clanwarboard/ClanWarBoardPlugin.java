@@ -98,12 +98,6 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void refreshOnlineBoard()
 	{
-		if (!config.enableOnlineSync())
-		{
-			apiStatus = ClanWarBoardApiStatus.offline("Online Sync is off");
-			refreshPanel();
-			return;
-		}
 		CompletableFuture.supplyAsync(() ->
 		{
 			try
