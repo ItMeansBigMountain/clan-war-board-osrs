@@ -4,8 +4,10 @@ import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
+import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -42,6 +44,8 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
+	private final ClanWarBoardApiClient apiClient = new ClanWarBoardApiClient();
+	private ClanWarBoardApiStatus apiStatus = ClanWarBoardApiStatus.offline("Online Sync has not refreshed yet");
 
 	@Override
 	protected void startUp()
@@ -55,6 +59,7 @@ public class ClanWarBoardPlugin extends Plugin
 			.build();
 		clientToolbar.addNavigation(navButton);
 		refreshPanel();
+		refreshOnlineBoard();
 		log.debug("{} started", PLUGIN_NAME);
 	}
 
@@ -73,6 +78,7 @@ public class ClanWarBoardPlugin extends Plugin
 		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
 		{
 			refreshPanel();
+			refreshOnlineBoard();
 			if (config.showLoginMessage())
 			{
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", buildLoginMessage(config, clanAccess()), null);
@@ -87,7 +93,37 @@ public class ClanWarBoardPlugin extends Plugin
 			return;
 		}
 		ClanAccess access = clanAccess();
-		panel.update(config, access.getClanName(), access.getPlayerName(), access.getRankName(), access.canManageWars(config.minimumLeaderRank()));
+		panel.update(config, access.getClanName(), access.getPlayerName(), access.getRankName(), access.canManageWars(config.minimumLeaderRank()), apiStatus);
+	}
+
+	private void refreshOnlineBoard()
+	{
+		if (!config.enableOnlineSync())
+		{
+			apiStatus = ClanWarBoardApiStatus.offline("Online Sync is off");
+			refreshPanel();
+			return;
+		}
+		CompletableFuture.supplyAsync(() ->
+		{
+			try
+			{
+				return apiClient.fetchStatus(config.serviceUrl());
+			}
+			catch (IOException | InterruptedException ex)
+			{
+				if (ex instanceof InterruptedException)
+				{
+					Thread.currentThread().interrupt();
+				}
+				log.debug("Clan War Board API refresh failed", ex);
+				return ClanWarBoardApiStatus.offline(ex.getMessage());
+			}
+		}).thenAccept(status -> SwingUtilities.invokeLater(() ->
+		{
+			apiStatus = status;
+			refreshPanel();
+		}));
 	}
 
 	private ClanAccess clanAccess()

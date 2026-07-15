@@ -14,6 +14,7 @@ public interface ClanWarBoardConfig extends Config
 	String DEFAULT_WORLD = "330";
 	String DEFAULT_HOTSPOT = "Lava Dragons";
 	String DEFAULT_RULES = "Multi only. Returns allowed. Hold the hotspot.";
+	String DEFAULT_SERVICE_URL = ClanWarBoardApiClient.DEFAULT_SERVICE_URL;
 
 	@ConfigItem(
 		keyName = "minimumLeaderRank",
@@ -93,10 +94,32 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "enableOnlineSync",
+		name = "Enable Online Sync",
+		description = "Connect to the Clan War Board service. Sends requests with plugin version headers; future write endpoints may send display name, clan name, rank, leader actions, and fight telemetry.",
+		position = 7
+	)
+	default boolean enableOnlineSync()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "serviceUrl",
+		name = "Service URL",
+		description = "Clan War Board service base URL used for online clan lookup and public fight board data",
+		position = 8
+	)
+	default String serviceUrl()
+	{
+		return DEFAULT_SERVICE_URL;
+	}
+
+	@ConfigItem(
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
 		description = "Show a short Clan War Board reminder after logging in",
-		position = 7
+		position = 9
 	)
 	default boolean showLoginMessage()
 	{

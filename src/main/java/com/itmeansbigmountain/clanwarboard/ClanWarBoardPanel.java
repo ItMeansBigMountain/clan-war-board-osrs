@@ -40,7 +40,7 @@ class ClanWarBoardPanel extends PluginPanel
 		add(scrollPane, BorderLayout.CENTER);
 	}
 
-	void update(ClanWarBoardConfig config, String clanName, String playerName, String rankName, boolean leader)
+	void update(ClanWarBoardConfig config, String clanName, String playerName, String rankName, boolean leader, ClanWarBoardApiStatus apiStatus)
 	{
 		content.removeAll();
 		addTitle("Clan War Board");
@@ -50,6 +50,7 @@ class ClanWarBoardPanel extends PluginPanel
 			"Rank: " + clean(rankName, "Unknown"),
 			leader ? "Mode: Leader setup" : "Mode: Member view"
 		}, leader ? LEADER : MUTED);
+		addOnlineCard(config, apiStatus);
 
 		if (leader)
 		{
@@ -62,6 +63,25 @@ class ClanWarBoardPanel extends PluginPanel
 
 		content.revalidate();
 		content.repaint();
+	}
+
+	private void addOnlineCard(ClanWarBoardConfig config, ClanWarBoardApiStatus apiStatus)
+	{
+		if (!config.enableOnlineSync())
+		{
+			addCard("Online board", new String[] {
+				"Online Sync is off.",
+				"Enable it in config to load public clans and open fights from the Clan War Board service."
+			}, MUTED);
+			return;
+		}
+		ClanWarBoardApiStatus status = apiStatus == null ? ClanWarBoardApiStatus.offline("Waiting for service refresh") : apiStatus;
+		addCard("Online board", new String[] {
+			status.isOnline() ? "Status: connected" : "Status: unavailable",
+			status.getMessage(),
+			"Public clans indexed: " + status.getClanCount(),
+			"Open challenges: " + status.getOpenFightCount()
+		}, status.isOnline() ? LEADER : MUTED);
 	}
 
 	private void addLeaderTools(ClanWarBoardConfig config)

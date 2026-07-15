@@ -37,6 +37,8 @@ public class ClanWarBoardPluginTest
 		assertEquals("330", config.warWorld());
 		assertEquals("Lava Dragons", config.hotspot());
 		assertEquals("Multi only. Returns allowed. Hold the hotspot.", config.rules());
+		assertFalse(config.enableOnlineSync());
+		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, config.serviceUrl());
 		assertTrue(config.showLoginMessage());
 	}
 
@@ -83,6 +85,14 @@ public class ClanWarBoardPluginTest
 			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Oyama", "TRAPISTAN", 100)));
 		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (member view)",
 			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Member", "TRAPISTAN", 50)));
+	}
+
+	@Test
+	public void apiClientHelpersAreStable()
+	{
+		assertEquals("https://example.com", ClanWarBoardApiClient.normalizeBaseUrl("https://example.com///"));
+		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, ClanWarBoardApiClient.normalizeBaseUrl(" "));
+		assertEquals(2, ClanWarBoardApiClient.countOccurrences("{\"clan_id\":1},{\"clan_id\":2}", "\"clan_id\""));
 	}
 
 	public static void main(String[] args) throws Exception
