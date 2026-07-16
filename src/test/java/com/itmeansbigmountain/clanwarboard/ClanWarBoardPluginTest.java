@@ -31,12 +31,12 @@ public class ClanWarBoardPluginTest
 
 		assertEquals("clanwarboard", group.value());
 		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
-		assertEquals("Weekend Wilderness War", config.warName());
-		assertEquals("Rival Clan", config.opponentClan());
-		assertEquals("Saturday 8 PM EST", config.warDate());
-		assertEquals("330", config.warWorld());
-		assertEquals("Lava Dragons", config.hotspot());
-		assertEquals("Multi only. Returns allowed. Hold the hotspot.", config.rules());
+		assertEquals("", config.warName());
+		assertEquals("", config.opponentClan());
+		assertEquals("", config.warDate());
+		assertEquals("", config.warWorld());
+		assertEquals("", config.hotspot());
+		assertEquals("", config.rules());
 		assertFalse(config.publicPlayerTracking());
 		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, config.serviceUrl());
 		assertTrue(config.showLoginMessage());
@@ -59,19 +59,19 @@ public class ClanWarBoardPluginTest
 			@Override
 			public String warName()
 			{
-				return "Lava Dragon War";
+				return "Configured War";
 			}
 
 			@Override
 			public String opponentClan()
 			{
-				return "Rival Clan";
+				return "Configured Opponent";
 			}
 
 			@Override
 			public String hotspot()
 			{
-				return "Lava Dragons";
+				return "Configured Hotspot";
 			}
 
 			@Override
@@ -81,9 +81,9 @@ public class ClanWarBoardPluginTest
 			}
 		};
 
-		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (leader setup unlocked)",
+		assertEquals("Clan War Board: Configured War vs Configured Opponent at Configured Hotspot on world 330 (leader setup unlocked)",
 			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Oyama", "TRAPISTAN", 100)));
-		assertEquals("Clan War Board: Lava Dragon War vs Rival Clan at Lava Dragons on world 330 (member view)",
+		assertEquals("Clan War Board: Configured War vs Configured Opponent at Configured Hotspot on world 330 (member view)",
 			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Member", "TRAPISTAN", 50)));
 	}
 

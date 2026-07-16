@@ -71,7 +71,7 @@ class ClanWarBoardPanel extends PluginPanel
 		addCard("Online board", new String[] {
 			status.isOnline() ? "Status: connected" : "Status: unavailable",
 			status.getMessage(),
-			"Public clans indexed: " + status.getClanCount(),
+			"Registered plugin clans: " + status.getClanCount(),
 			"Open challenges: " + status.getOpenFightCount()
 		}, status.isOnline() ? LEADER : MUTED);
 	}

@@ -8,12 +8,12 @@ import net.runelite.client.config.ConfigItem;
 public interface ClanWarBoardConfig extends Config
 {
 	String CONFIG_GROUP = "clanwarboard";
-	String DEFAULT_WAR_NAME = "Weekend Wilderness War";
-	String DEFAULT_OPPONENT_CLAN = "Rival Clan";
-	String DEFAULT_WAR_DATE = "Saturday 8 PM EST";
-	String DEFAULT_WORLD = "330";
-	String DEFAULT_HOTSPOT = "Lava Dragons";
-	String DEFAULT_RULES = "Multi only. Returns allowed. Hold the hotspot.";
+	String DEFAULT_WAR_NAME = "";
+	String DEFAULT_OPPONENT_CLAN = "";
+	String DEFAULT_WAR_DATE = "";
+	String DEFAULT_WORLD = "";
+	String DEFAULT_HOTSPOT = "";
+	String DEFAULT_RULES = "";
 	String DEFAULT_SERVICE_URL = ClanWarBoardApiClient.DEFAULT_SERVICE_URL;
 
 	@ConfigItem(
