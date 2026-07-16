@@ -116,6 +116,17 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "developmentRoleOverride",
+		name = "[Development] Panel Role",
+		description = "Development-only UI preview. Automatic uses your real clan rank. Pretend modes never grant backend authority.",
+		position = 10
+	)
+	default DevelopmentRoleOverride developmentRoleOverride()
+	{
+		return DevelopmentRoleOverride.AUTOMATIC;
+	}
+
+	@ConfigItem(
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
 		description = "Show a short Clan War Board reminder after logging in",

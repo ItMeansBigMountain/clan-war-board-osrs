@@ -39,7 +39,20 @@ public class ClanWarBoardPluginTest
 		assertEquals("", config.rules());
 		assertFalse(config.publicPlayerTracking());
 		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, config.serviceUrl());
+		assertEquals(DevelopmentRoleOverride.AUTOMATIC, config.developmentRoleOverride());
 		assertTrue(config.showLoginMessage());
+	}
+
+	@Test
+	public void developmentRoleOverrideControlsPanelModeOnly()
+	{
+		ClanAccess leader = new ClanAccess("Leader", "TRAPISTAN", 126);
+		ClanAccess member = new ClanAccess("Member", "TRAPISTAN", 50);
+
+		assertTrue(ClanWarBoardPlugin.resolveLeaderView(leader, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.AUTOMATIC));
+		assertFalse(ClanWarBoardPlugin.resolveLeaderView(member, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.AUTOMATIC));
+		assertTrue(ClanWarBoardPlugin.resolveLeaderView(member, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.PRETEND_LEADER));
+		assertFalse(ClanWarBoardPlugin.resolveLeaderView(leader, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.PRETEND_MEMBER));
 	}
 
 	@Test

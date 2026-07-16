@@ -22,6 +22,7 @@ import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -88,6 +89,15 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", buildLoginMessage(config, clanAccess()), null);
 			}
+		}
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if (ClanWarBoardConfig.CONFIG_GROUP.equals(event.getGroup()))
+		{
+			refreshPanel();
 		}
 	}
 
@@ -161,7 +171,8 @@ public class ClanWarBoardPlugin extends Plugin
 			return;
 		}
 		ClanAccess access = clanAccess();
-		panel.update(config, access.getClanName(), access.getPlayerName(), access.getRankName(), access.canManageWars(config.minimumLeaderRank()), apiStatus);
+		boolean leaderView = resolveLeaderView(access, config.minimumLeaderRank(), config.developmentRoleOverride());
+		panel.update(config, access.getClanName(), access.getPlayerName(), access.getRankName(), leaderView, apiStatus);
 	}
 
 	private void refreshOnlineBoard()
@@ -264,9 +275,22 @@ public class ClanWarBoardPlugin extends Plugin
 		return local == null ? null : local.getName();
 	}
 
+	static boolean resolveLeaderView(ClanAccess access, LeaderMinimumRank minimumRank, DevelopmentRoleOverride override)
+	{
+		if (override == DevelopmentRoleOverride.PRETEND_LEADER)
+		{
+			return true;
+		}
+		if (override == DevelopmentRoleOverride.PRETEND_MEMBER)
+		{
+			return false;
+		}
+		return access.canManageWars(minimumRank);
+	}
+
 	static String buildLoginMessage(ClanWarBoardConfig config, ClanAccess access)
 	{
-		String mode = access.canManageWars(config.minimumLeaderRank()) ? "leader setup unlocked" : "member view";
+		String mode = resolveLeaderView(access, config.minimumLeaderRank(), config.developmentRoleOverride()) ? "leader setup unlocked" : "member view";
 		return PLUGIN_NAME + ": " + config.warName() + " vs " + config.opponentClan() + " at " + config.hotspot() + " on world " + config.warWorld() + " (" + mode + ")";
 	}
 
