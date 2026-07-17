@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
@@ -37,6 +38,8 @@ import net.runelite.client.ui.NavigationButton;
 public class ClanWarBoardPlugin extends Plugin
 {
 	static final String PLUGIN_NAME = "Clan War Board";
+	static final String PLUGIN_VERSION = "1.0.0";
+	private static final String INSTALL_ID_KEY = "installationId";
 
 	@Inject
 	private Client client;
@@ -46,6 +49,9 @@ public class ClanWarBoardPlugin extends Plugin
 
 	@Inject
 	private ClanWarBoardConfig config;
+
+	@Inject
+	private ConfigManager configManager;
 
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
@@ -177,10 +183,13 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void refreshOnlineBoard()
 	{
+		ClanAccess registrationAccess = clanAccess();
+		String installationId = installationId();
 		CompletableFuture.supplyAsync(() ->
 		{
 			try
 			{
+				apiClient.register(config.serviceUrl(), installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking());
 				return apiClient.fetchStatus(config.serviceUrl());
 			}
 			catch (IOException | InterruptedException ex)
@@ -267,6 +276,17 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 		int rankValue = member.getRank() == null ? -1 : member.getRank().getRank();
 		return new ClanAccess(playerName, clan.getName(), rankValue);
+	}
+
+	private String installationId()
+	{
+		String value = configManager.getConfiguration(ClanWarBoardConfig.CONFIG_GROUP, INSTALL_ID_KEY);
+		if (value == null || value.trim().isEmpty())
+		{
+			value = UUID.randomUUID().toString();
+			configManager.setConfiguration(ClanWarBoardConfig.CONFIG_GROUP, INSTALL_ID_KEY, value);
+		}
+		return value;
 	}
 
 	private String localPlayerName()

@@ -101,6 +101,16 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
+	public void registrationPayloadCarriesRealClanAndPrivacyWithoutDevelopmentAuthority()
+	{
+		String json = ClanWarBoardApiClient.registrationJson("11111111-1111-4111-8111-111111111111", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", false);
+		assertTrue(json.contains("\"clanName\":\"TRAPISTAN\""));
+		assertTrue(json.contains("\"clanRank\":126"));
+		assertTrue(json.contains("\"publicStats\":false"));
+		assertFalse(json.contains("pretend"));
+	}
+
+	@Test
 	public void apiClientHelpersAreStable()
 	{
 		assertEquals("https://example.com", ClanWarBoardApiClient.normalizeBaseUrl("https://example.com///"));

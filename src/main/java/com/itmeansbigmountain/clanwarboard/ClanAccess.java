@@ -38,6 +38,11 @@ class ClanAccess
 		return clanName;
 	}
 
+	int getRankValue()
+	{
+		return rankValue;
+	}
+
 	String getRankName()
 	{
 		if (rankValue >= 126)

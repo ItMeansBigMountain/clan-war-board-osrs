@@ -40,6 +40,34 @@ final class ClanWarBoardApiClient
 		return ClanWarBoardApiStatus.online("Connected to Clan War Board", countOccurrences(clans, "\"clan_id\""), countOccurrences(availability, "\"creatorClanName\""));
 	}
 
+	void register(String baseUrl, String installId, ClanAccess access, String pluginVersion, boolean publicStats) throws IOException, InterruptedException
+	{
+		if (access == null || access.getClanName() == null || access.getClanName().trim().isEmpty())
+		{
+			return;
+		}
+		post(normalizeBaseUrl(baseUrl) + "/api/plugin/register", registrationJson(installId, access, pluginVersion, publicStats));
+	}
+
+	static String registrationJson(String installId, ClanAccess access, String pluginVersion, boolean publicStats)
+	{
+		return "{\"installId\":\"" + jsonEscape(installId) +
+			"\",\"playerName\":\"" + jsonEscape(access.getPlayerName()) +
+			"\",\"clanName\":\"" + jsonEscape(access.getClanName()) +
+			"\",\"clanRank\":" + access.getRankValue() +
+			",\"pluginVersion\":\"" + jsonEscape(pluginVersion) +
+			"\",\"publicStats\":" + publicStats + "}";
+	}
+
+	private static String jsonEscape(String value)
+	{
+		if (value == null)
+		{
+			return "";
+		}
+		return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
+	}
+
 	void submitTelemetry(String baseUrl, List<ClanWarBoardTelemetryEvent> events) throws IOException, InterruptedException
 	{
 		if (events == null || events.isEmpty())
