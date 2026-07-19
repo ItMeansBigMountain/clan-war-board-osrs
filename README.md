@@ -52,16 +52,18 @@ Clan War Board communicates over HTTPS with an Azure service not controlled or v
 Depending on the action and privacy setting, the plugin transmits:
 
 - an opaque random installation UUID;
-- RuneScape display name;
+- the logged-in RuneScape display name;
 - primary clan name and client-observed clan rank;
 - plugin version;
 - availability and challenge terms entered by an authorized leader;
-- timestamps and world/fight event fields; and
-- fight telemetry and public display name when public player tracking is enabled.
+- accepted-fight world, tick, timestamp, region ID, world tile, and plane;
+- observed opponent/attacker display names for per-opponent event analysis;
+- event type, amount, relationship classification, attribution evidence, and confidence; and
+- the logged-in player's public display name only when public player tracking is enabled.
 
-Bearer session credentials are never displayed in configuration or written to normal logs. Exact accepted world, location, and rules are excluded from the public scheduled-fight response.
+Bearer session credentials are never displayed in configuration or written to normal logs. Exact accepted world, location, and rules are excluded from live public scheduled-fight responses. After the agreed fight window ends, the website publishes the completed fight's terms, cumulative clan/player/opponent analytics, location hotspots, evidence/confidence distributions, and individual event timeline. Players who disable public tracking appear under a stable anonymous label; observed opponent names remain attached to events for verbose analysis.
 
-Telemetry is persisted only when the event matches a confirmed fight's participating clan, world, and scheduled time window. Private aggregates are keyed by a one-way normalized player/clan hash and returned only to an authenticated session for that player. The Clan overview reports fights observed, observed kill candidates, deaths, returns, opponent damage, friendly-fire damage, total damage inflicted, damage received, third-party damage, activity samples, and accepted event count. Failed batches are requeued and deterministic event IDs prevent retry double-counting.
+Telemetry is persisted only when an event matches a confirmed fight's participating clan, world, and scheduled time window. Private aggregates are keyed by a one-way normalized player/clan hash and returned to an authenticated session for that player. Outgoing damage is exact local hitsplat evidence. An observed kill requires recent local damage to the same named player. A return is the first combat observation after the local player's death. Incoming damage amounts are exact, while attacker identity is included only when one nearby player is uniquely interacting with the local player; its evidence and confidence are stored. Non-own-clan actors are labeled `non_own_clan`, not asserted to be members of the agreed opposing clan. Failed batches are requeued and deterministic event IDs prevent retry double-counting.
 
 ## Build and test
 

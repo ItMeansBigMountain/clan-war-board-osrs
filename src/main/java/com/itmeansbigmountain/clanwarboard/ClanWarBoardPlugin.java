@@ -18,6 +18,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -74,6 +75,7 @@ public class ClanWarBoardPlugin extends Plugin
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
 	private final ClanWarBoardTelemetryBuffer telemetryBuffer = new ClanWarBoardTelemetryBuffer();
+	private final CombatSignalTracker combatSignals = new CombatSignalTracker();
 	private final AtomicBoolean sessionRefreshInFlight = new AtomicBoolean();
 	private final AtomicBoolean boardRefreshInFlight = new AtomicBoolean();
 	private volatile ClanWarBoardSession session;
@@ -123,6 +125,7 @@ public class ClanWarBoardPlugin extends Plugin
 	{
 		running = false;
 		session = null;
+		combatSignals.reset();
 		clientToolbar.removeNavigation(navButton);
 		navButton = null;
 		panel = null;
@@ -137,6 +140,11 @@ public class ClanWarBoardPlugin extends Plugin
 			refreshPanel();
 			loginMessagePending = config.showLoginMessage();
 			refreshOnlineBoard();
+		}
+		else if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN
+			|| gameStateChanged.getGameState() == GameState.HOPPING)
+		{
+			combatSignals.reset();
 		}
 	}
 
@@ -170,7 +178,7 @@ public class ClanWarBoardPlugin extends Plugin
 		ClanAccess access = clanAccess();
 		if (telemetryBuffer.shouldHeartbeat(currentTick))
 		{
-			queueTelemetry("heartbeat", null, 0, access);
+			queueTelemetry("heartbeat", null, 0, access, "periodic_client_presence", "high", "none");
 		}
 		flushTelemetryIfReady();
 	}
@@ -196,11 +204,20 @@ public class ClanWarBoardPlugin extends Plugin
 		ClanAccess access = clanAccess();
 		if (target == local)
 		{
-			queueTelemetry("damage_taken", null, amount, access);
+			Player attacker = soleInteractingAttacker(local);
+			String attackerName = attacker == null ? null : attacker.getName();
+			emitCombatReturn(access, attackerName);
+			queueTelemetry("damage_taken", attackerName, amount, access,
+				attacker == null ? "local_hitsplat_attacker_unresolved" : "local_hitsplat_single_interacting_attacker",
+				attacker == null ? "high_amount_low_source" : "medium", relationFor(attackerName));
 		}
 		else if (event.getHitsplat().isMine())
 		{
-			queueTelemetry(isOwnClanMember(target.getName()) ? "friendly_fire_damage" : "damage_dealt", target.getName(), amount, access);
+			emitCombatReturn(access, target.getName());
+			combatSignals.recordOutgoingDamage(target.getName(), client.getTickCount());
+			boolean ownClan = isOwnClanMember(target.getName());
+			queueTelemetry(ownClan ? "friendly_fire_damage" : "damage_dealt", target.getName(), amount, access,
+				"local_player_hitsplat", "high", ownClan ? "own_clan" : "non_own_clan");
 		}
 	}
 
@@ -216,12 +233,14 @@ public class ClanWarBoardPlugin extends Plugin
 		ClanAccess access = clanAccess();
 		if (local != null && dead == local)
 		{
-			queueTelemetry("death", null, 1, access);
+			combatSignals.recordLocalDeath();
+			queueTelemetry("death", null, 1, access, "local_actor_death", "high", "self");
 			flushTelemetryNow();
 		}
-		else if (dead.getName() != null)
+		else if (dead.getName() != null && combatSignals.consumeObservedKill(dead.getName(), client.getTickCount()))
 		{
-			queueTelemetry("kill_candidate", dead.getName(), 1, access);
+			queueTelemetry("kill_candidate", dead.getName(), 1, access,
+				"target_death_with_recent_local_damage", "medium", relationFor(dead.getName()));
 			flushTelemetryNow();
 		}
 	}
@@ -402,8 +421,52 @@ public class ClanWarBoardPlugin extends Plugin
 		});
 	}
 
-	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access)
+	private void emitCombatReturn(ClanAccess access, String opponentName)
 	{
+		if (combatSignals.consumeCombatReturn())
+		{
+			queueTelemetry("return", opponentName, 1, access,
+				"first_combat_event_after_local_death", "high", relationFor(opponentName));
+		}
+	}
+
+	private Player soleInteractingAttacker(Player local)
+	{
+		Player candidate = null;
+		WorldPoint localPoint = local.getWorldLocation();
+		for (Player player : client.getPlayers())
+		{
+			if (player == null || player == local || player.getInteracting() != local || player.getName() == null)
+			{
+				continue;
+			}
+			if (localPoint != null && player.getWorldLocation() != null && player.getWorldLocation().distanceTo(localPoint) > 15)
+			{
+				continue;
+			}
+			if (candidate != null)
+			{
+				return null;
+			}
+			candidate = player;
+		}
+		return candidate;
+	}
+
+	private String relationFor(String playerName)
+	{
+		if (playerName == null || playerName.trim().isEmpty())
+		{
+			return "unattributed";
+		}
+		return isOwnClanMember(playerName) ? "own_clan" : "non_own_clan";
+	}
+
+	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access,
+		String evidence, String confidence, String relation)
+	{
+		Player local = client.getLocalPlayer();
+		WorldPoint location = local == null ? null : local.getWorldLocation();
 		telemetryBuffer.add(new ClanWarBoardTelemetryEvent(
 			type,
 			access.getPlayerName(),
@@ -413,7 +476,14 @@ public class ClanWarBoardPlugin extends Plugin
 			client.getWorld(),
 			client.getTickCount(),
 			System.currentTimeMillis(),
-			config.publicPlayerTracking()
+			config.publicPlayerTracking(),
+			evidence,
+			confidence,
+			relation,
+			location == null ? 0 : location.getRegionID(),
+			location == null ? 0 : location.getX(),
+			location == null ? 0 : location.getY(),
+			location == null ? 0 : location.getPlane()
 		));
 	}
 

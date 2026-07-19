@@ -11,8 +11,24 @@ final class ClanWarBoardTelemetryEvent
 	private final int tick;
 	private final long timestamp;
 	private final boolean playerPublic;
+	private final String evidence;
+	private final String confidence;
+	private final String relation;
+	private final int regionId;
+	private final int x;
+	private final int y;
+	private final int plane;
 
-	ClanWarBoardTelemetryEvent(String type, String playerName, String clanName, String opponentName, int amount, int world, int tick, long timestamp, boolean playerPublic)
+	ClanWarBoardTelemetryEvent(String type, String playerName, String clanName, String opponentName,
+		int amount, int world, int tick, long timestamp, boolean playerPublic)
+	{
+		this(type, playerName, clanName, opponentName, amount, world, tick, timestamp, playerPublic,
+			"legacy_client_observation", "unknown", "unknown", 0, 0, 0, 0);
+	}
+
+	ClanWarBoardTelemetryEvent(String type, String playerName, String clanName, String opponentName,
+		int amount, int world, int tick, long timestamp, boolean playerPublic, String evidence,
+		String confidence, String relation, int regionId, int x, int y, int plane)
 	{
 		this.type = type;
 		this.playerName = playerName;
@@ -23,6 +39,13 @@ final class ClanWarBoardTelemetryEvent
 		this.tick = tick;
 		this.timestamp = timestamp;
 		this.playerPublic = playerPublic;
+		this.evidence = evidence;
+		this.confidence = confidence;
+		this.relation = relation;
+		this.regionId = regionId;
+		this.x = x;
+		this.y = y;
+		this.plane = plane;
 	}
 
 	String toJson()
@@ -36,7 +59,14 @@ final class ClanWarBoardTelemetryEvent
 			+ "\"world\":" + world + ","
 			+ "\"tick\":" + tick + ","
 			+ "\"timestamp\":" + timestamp + ","
-			+ "\"playerPublic\":" + playerPublic
+			+ "\"playerPublic\":" + playerPublic + ","
+			+ jsonField("evidence", evidence) + ","
+			+ jsonField("confidence", confidence) + ","
+			+ jsonField("relation", relation) + ","
+			+ "\"regionId\":" + regionId + ","
+			+ "\"x\":" + x + ","
+			+ "\"y\":" + y + ","
+			+ "\"plane\":" + plane
 			+ "}";
 	}
 

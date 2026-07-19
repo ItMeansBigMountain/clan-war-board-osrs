@@ -158,6 +158,34 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
+	public void combatSignalsRequireRecentDamageAndCountOneReturnPerDeath()
+	{
+		CombatSignalTracker tracker = new CombatSignalTracker();
+		tracker.recordOutgoingDamage("Enemy", 100);
+		assertTrue(tracker.consumeObservedKill(" enemy ", 119));
+		assertFalse(tracker.consumeObservedKill("Enemy", 120));
+
+		tracker.recordOutgoingDamage("Late", 200);
+		assertFalse(tracker.consumeObservedKill("Late", 221));
+		tracker.recordLocalDeath();
+		assertTrue(tracker.consumeCombatReturn());
+		assertFalse(tracker.consumeCombatReturn());
+	}
+
+	@Test
+	public void enrichedTelemetryCarriesEvidenceLocationAndOpponent()
+	{
+		ClanWarBoardTelemetryEvent event = new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy",
+			31, 330, 123, 456L, true, "local_player_hitsplat", "high", "non_own_clan", 12850, 3200, 3600, 0);
+		String json = event.toJson();
+		assertTrue(json.contains("\"opponentName\":\"Enemy\""));
+		assertTrue(json.contains("\"evidence\":\"local_player_hitsplat\""));
+		assertTrue(json.contains("\"confidence\":\"high\""));
+		assertTrue(json.contains("\"regionId\":12850"));
+		assertTrue(json.contains("\"x\":3200"));
+	}
+
+	@Test
 	public void telemetryBufferBatchesAndThrottles()
 	{
 		ClanWarBoardTelemetryBuffer buffer = new ClanWarBoardTelemetryBuffer();
