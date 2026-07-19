@@ -1,85 +1,68 @@
 # Clan War Board
 
-Clan War Board is a RuneLite external plugin for OSRS clans that want a simple in-client war board for setting up wilderness fights.
+Clan War Board is a RuneLite external plugin for OSRS clans to publish, accept, schedule, and review consensual clan fights. It is an organization board—not an enemy tracker or scouting tool.
 
-The first version keeps the idea intentionally simple:
+Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
 
-- RuneLite detects your rank in your current clan.
-- Players at or above the configured leader rank get a **leader setup view**.
-- Everyone else gets a **member rally view**.
-- Leaders configure the fight details in RuneLite plugin config.
-- Members see the current opponent, time, world, hotspot, and rules/notes.
+## Panel workflow
 
-This is not an enemy tracker or scouting tool. It is a clan war organization board.
+The side panel has three fixed navigation tabs:
 
-## Current features
+1. **Clan** — clan overview, installed-plugin coverage, prior-fight count, scheduled-fight count, open-post count, and the next planned war.
+2. **Board** — switch between **Needs opponent** and **Scheduled**. Members can read open posts but cannot open or accept them. Server-authorized leaders can open a post and continue to private scheduling.
+3. **Private** — server-authorized leaders can publish a public availability post or send exact private terms to another clan.
 
-- Plugin display name: `Clan War Board`.
-- Clan-rank gate using RuneLite's clan channel rank data.
-- Configurable minimum leader rank:
-  - Administrator
-  - Deputy owner
-  - Owner
-- Leader setup card for eligible ranks.
-- Member read-only rally card for non-leaders.
-- Configurable war details:
-  - war name
-  - opponent clan
-  - date/time
-  - world
-  - wilderness hotspot/rally zone
-  - rules/notes
-- Optional login reminder showing the active war plan and whether the user has leader setup access.
-- Unit tests for plugin metadata, defaults, rank gating, and login message formatting.
+Fight details use in-panel back navigation, so returning from a detail page keeps the user in the same tab and list filter.
 
-## Intended product direction
+No fights or clans are fabricated. Empty service collections produce explicit empty states.
 
-Clan War Board should help clans set up and manage fights without pretending OSRS provides an official wilderness-war winner.
+## Role handling
 
-Near-term direction:
+RuneLite reads the local player's membership and observed rank from the primary clan. The complete clan roster comes from `ClanSettings`; online channel data is not treated as the complete roster.
 
-1. Keep leader/member UI split based on clan rank.
-2. Let leaders configure/share upcoming fights.
-3. Let members quickly check where to rally and what the rules are.
-4. Later, add local war-session summaries such as attendance, hotspot presence, and time-in-zone.
+Leader controls require both:
 
-Possible future additions:
+- the configured minimum observed clan rank; and
+- a current server-issued `leader:write` capability bound to the installation and clan.
 
-- saved war sessions
-- hotspot presets for common multi wilderness locations
-- start/stop local war tracking
-- post-war summary card
-- copy-to-clipboard war plan
-- optional small overlay with world/hotspot/time
+Client-side button visibility is not backend authorization. RuneLite-observed rank is useful evidence but is not cryptographic proof from Jagex.
 
 ## Configuration
 
-Open RuneLite's plugin configuration after loading the plugin and adjust:
+RuneLite settings intentionally contain only:
 
-- `Leader Rank Needed`: minimum clan rank required to see leader setup mode.
-- `War Name`: name of the planned fight.
-- `Opponent Clan`: clan you are fighting.
-- `Date / Time`: planned date and time.
-- `World`: target world.
-- `Hotspot`: rally/war zone such as Lava Dragons, Chaos Altar, or Vet'ion.
-- `Rules / Notes`: gear, returns, and rule reminders for members.
-- `Show Login Message`: enables/disables login reminders.
+- `Leader Rank Needed`
+- `Show My Player Stats Publicly`
+- `Show Login Message`
 
-## How the leader/member split works
+War creation, opponents, dates, worlds, locations, and rules belong inside the panel workflow. The production service URL is pinned in code and is not user-configurable.
 
-The plugin reads your current clan channel and tries to find your local player name in that clan. If your rank value is at or above the configured threshold, the side panel shows leader setup mode.
+## Login message
 
-Default threshold:
+After the board refresh completes, the plugin displays a high-visibility colored message containing:
 
-```text
-Administrator or higher
-```
+- the number of fights needing an opponent; and
+- the next scheduled fight, when one exists.
 
-If you are not in a clan, your rank cannot be detected, or your rank is below the threshold, the plugin shows member view.
+## Third-party networking and privacy
 
-## Build, test, and run locally
+Clan War Board communicates over HTTPS with an Azure service not controlled or verified by the RuneLite developers. Network requests necessarily expose the user's IP address to that service.
 
-Use Java 11 for RuneLite compatibility:
+Depending on the action and privacy setting, the plugin transmits:
+
+- an opaque random installation UUID;
+- RuneScape display name;
+- primary clan name and client-observed clan rank;
+- plugin version;
+- availability and challenge terms entered by an authorized leader;
+- timestamps and world/fight event fields; and
+- fight telemetry and public display name when public player tracking is enabled.
+
+Bearer session credentials are never displayed in configuration or written to normal logs. Exact accepted world, location, and rules are excluded from the public scheduled-fight response.
+
+## Build and test
+
+Use Java 11:
 
 ```bash
 export JAVA_HOME=/opt/data/jdks/current-java11
@@ -87,24 +70,20 @@ export PATH="$JAVA_HOME/bin:$PATH"
 ./gradlew clean test assemble --no-daemon --console=plain
 ```
 
-To launch RuneLite in developer mode with this external plugin loaded:
+On Windows CMD, use the repository's Java 11 environment and run:
 
-```bash
-export JAVA_HOME=/opt/data/jdks/current-java11
-export PATH="$JAVA_HOME/bin:$PATH"
-./gradlew run --no-daemon --console=plain
+```text
+gradlew.bat clean test assemble --no-daemon --console=plain
 ```
 
-## Manual RuneLite testing checklist
+## Manual verification
 
-1. Launch with `./gradlew run --no-daemon --console=plain`.
-2. Confirm the plugin appears as `Clan War Board` in the plugin list/sidebar.
-3. Join/log into an account with a clan rank.
-4. Set `Leader Rank Needed` to a rank at or below your clan rank and confirm leader setup mode appears.
-5. Set `Leader Rank Needed` above your clan rank and confirm member view appears.
-6. Edit war name, opponent, date/time, world, hotspot, and rules; confirm the panel and login message reflect those values.
-7. Confirm startup/shutdown logs contain the plugin name and no errors are emitted.
-
-## Plugin-hub prep status
-
-Still in progress. Before Plugin Hub submission, add screenshots, polish the panel visually inside RuneLite, verify rank detection live with a real clan account, and decide whether v1 should include saved war sessions or only a config-backed war board.
+1. Confirm the settings page contains no service URL, development role, or war form fields.
+2. Confirm the panel shows Clan, Board, and Private tabs at the top.
+3. Confirm Board shows Needs opponent and Scheduled filters.
+4. Confirm a member cannot open an unopposed post.
+5. Confirm a server-authorized leader can open an unopposed post and proceed to private setup.
+6. Confirm Back returns to the same Board filter.
+7. Confirm the Clan tab shows installed/total members as `installed/roster`.
+8. Confirm login text is visible and reflects current board data.
+9. Confirm empty API collections remain truthful empty states.

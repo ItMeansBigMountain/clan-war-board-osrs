@@ -8,18 +8,11 @@ import net.runelite.client.config.ConfigItem;
 public interface ClanWarBoardConfig extends Config
 {
 	String CONFIG_GROUP = "clanwarboard";
-	String DEFAULT_WAR_NAME = "";
-	String DEFAULT_OPPONENT_CLAN = "";
-	String DEFAULT_WAR_DATE = "";
-	String DEFAULT_WORLD = "";
-	String DEFAULT_HOTSPOT = "";
-	String DEFAULT_RULES = "";
-	String DEFAULT_SERVICE_URL = ClanWarBoardApiClient.DEFAULT_SERVICE_URL;
 
 	@ConfigItem(
 		keyName = "minimumLeaderRank",
 		name = "Leader Rank Needed",
-		description = "Minimum clan rank required to create/edit clan war plans in the panel",
+		description = "Minimum observed clan rank eligible to request server-authorized leader tools",
 		position = 0
 	)
 	default LeaderMinimumRank minimumLeaderRank()
@@ -28,76 +21,10 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "warName",
-		name = "War Name",
-		description = "Name of the planned clan war",
-		position = 1
-	)
-	default String warName()
-	{
-		return DEFAULT_WAR_NAME;
-	}
-
-	@ConfigItem(
-		keyName = "opponentClan",
-		name = "Opponent Clan",
-		description = "Clan you are setting up the fight against",
-		position = 2
-	)
-	default String opponentClan()
-	{
-		return DEFAULT_OPPONENT_CLAN;
-	}
-
-	@ConfigItem(
-		keyName = "warDate",
-		name = "Date / Time",
-		description = "When the fight is planned",
-		position = 3
-	)
-	default String warDate()
-	{
-		return DEFAULT_WAR_DATE;
-	}
-
-	@ConfigItem(
-		keyName = "warWorld",
-		name = "World",
-		description = "World for the fight",
-		position = 4
-	)
-	default String warWorld()
-	{
-		return DEFAULT_WORLD;
-	}
-
-	@ConfigItem(
-		keyName = "hotspot",
-		name = "Hotspot",
-		description = "Wilderness hotspot or meeting zone for the fight",
-		position = 5
-	)
-	default String hotspot()
-	{
-		return DEFAULT_HOTSPOT;
-	}
-
-	@ConfigItem(
-		keyName = "rules",
-		name = "Rules / Notes",
-		description = "Short rules, gear, and return notes shown to members",
-		position = 6
-	)
-	default String rules()
-	{
-		return DEFAULT_RULES;
-	}
-
-	@ConfigItem(
 		keyName = "publicPlayerTracking",
 		name = "Show My Player Stats Publicly",
-		description = "If enabled, your player name can appear on public Clan War Board website performance pages. If disabled, war telemetry still syncs but public website player tracking is private.",
-		position = 7
+		description = "This sends your display name, clan, observed rank, IP address, and fight telemetry to the Clan War Board Azure service. Disabled keeps your public player identity private.",
+		position = 1
 	)
 	default boolean publicPlayerTracking()
 	{
@@ -105,32 +32,10 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "serviceUrl",
-		name = "Service URL",
-		description = "Clan War Board service base URL used for required online sync, clan lookup, fight telemetry, and public fight board data",
-		position = 8
-	)
-	default String serviceUrl()
-	{
-		return DEFAULT_SERVICE_URL;
-	}
-
-	@ConfigItem(
-		keyName = "developmentRoleOverride",
-		name = "[Development] Panel Role",
-		description = "Development-only UI preview. Automatic uses your real clan rank. Pretend modes never grant backend authority.",
-		position = 10
-	)
-	default DevelopmentRoleOverride developmentRoleOverride()
-	{
-		return DevelopmentRoleOverride.AUTOMATIC;
-	}
-
-	@ConfigItem(
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
-		description = "Show a short Clan War Board reminder after logging in",
-		position = 9
+		description = "Show available-fight and next-war information after logging in",
+		position = 2
 	)
 	default boolean showLoginMessage()
 	{

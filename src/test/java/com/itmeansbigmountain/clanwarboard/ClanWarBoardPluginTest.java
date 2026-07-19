@@ -5,6 +5,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Map;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.externalplugins.ExternalPluginManager;
@@ -31,28 +37,31 @@ public class ClanWarBoardPluginTest
 
 		assertEquals("clanwarboard", group.value());
 		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
-		assertEquals("", config.warName());
-		assertEquals("", config.opponentClan());
-		assertEquals("", config.warDate());
-		assertEquals("", config.warWorld());
-		assertEquals("", config.hotspot());
-		assertEquals("", config.rules());
 		assertFalse(config.publicPlayerTracking());
-		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, config.serviceUrl());
-		assertEquals(DevelopmentRoleOverride.AUTOMATIC, config.developmentRoleOverride());
 		assertTrue(config.showLoginMessage());
+		Set<String> methodNames = java.util.Arrays.stream(ClanWarBoardConfig.class.getMethods())
+			.map(java.lang.reflect.Method::getName)
+			.collect(Collectors.toSet());
+		assertFalse(methodNames.contains("serviceUrl"));
+		assertFalse(methodNames.contains("developmentRoleOverride"));
+		assertFalse(methodNames.contains("warName"));
+		assertFalse(methodNames.contains("opponentClan"));
+		assertFalse(methodNames.contains("warDate"));
+		assertFalse(methodNames.contains("warWorld"));
+		assertFalse(methodNames.contains("hotspot"));
+		assertFalse(methodNames.contains("rules"));
 	}
 
 	@Test
-	public void developmentRoleOverrideControlsPanelModeOnly()
+	public void panelModeUsesObservedClanRankOnly()
 	{
 		ClanAccess leader = new ClanAccess("Leader", "TRAPISTAN", 126);
 		ClanAccess member = new ClanAccess("Member", "TRAPISTAN", 50);
+		ClanWarBoardSession leaderSession = new ClanWarBoardSession("token", Instant.now().plusSeconds(600), Collections.singleton("leader:write"));
 
-		assertTrue(ClanWarBoardPlugin.resolveLeaderView(leader, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.AUTOMATIC));
-		assertFalse(ClanWarBoardPlugin.resolveLeaderView(member, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.AUTOMATIC));
-		assertTrue(ClanWarBoardPlugin.resolveLeaderView(member, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.PRETEND_LEADER));
-		assertFalse(ClanWarBoardPlugin.resolveLeaderView(leader, LeaderMinimumRank.ADMINISTRATOR, DevelopmentRoleOverride.PRETEND_MEMBER));
+		assertFalse(ClanWarBoardPlugin.resolveLeaderView(leader, LeaderMinimumRank.ADMINISTRATOR, null));
+		assertTrue(ClanWarBoardPlugin.resolveLeaderView(leader, LeaderMinimumRank.ADMINISTRATOR, leaderSession));
+		assertFalse(ClanWarBoardPlugin.resolveLeaderView(member, LeaderMinimumRank.ADMINISTRATOR, leaderSession));
 	}
 
 	@Test
@@ -65,39 +74,25 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
-	public void loginMessageUsesWarDetailsAndRankMode()
+	public void loginMessageUsesRealBoardCountsAndUpcomingFight()
 	{
-		ClanWarBoardConfig config = new ClanWarBoardConfig()
-		{
-			@Override
-			public String warName()
-			{
-				return "Configured War";
-			}
+		WarBoardFight scheduled = new WarBoardFight("1", "trapistan", "rivals", "2026-07-20T20:00:00Z", 30, 70, 126, "", "scheduled");
+		ClanWarBoardState state = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 2, 3), 11, 13,
+			Collections.singletonList(new WarBoardFight("2", "other", null, "2026-07-21T20:00:00Z", 30, 70, 126, "", "open")),
+			Collections.singletonList(scheduled), Collections.emptyList());
+		String message = ClanWarBoardPlugin.buildLoginMessage(state);
+		assertTrue(message.contains("1 fight needs an opponent"));
+		assertTrue(message.contains("Next: trapistan vs rivals"));
+	}
 
-			@Override
-			public String opponentClan()
-			{
-				return "Configured Opponent";
-			}
-
-			@Override
-			public String hotspot()
-			{
-				return "Configured Hotspot";
-			}
-
-			@Override
-			public String warWorld()
-			{
-				return "330";
-			}
-		};
-
-		assertEquals("Clan War Board: Configured War vs Configured Opponent at Configured Hotspot on world 330 (leader setup unlocked)",
-			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Oyama", "TRAPISTAN", 100)));
-		assertEquals("Clan War Board: Configured War vs Configured Opponent at Configured Hotspot on world 330 (member view)",
-			ClanWarBoardPlugin.buildLoginMessage(config, new ClanAccess("Member", "TRAPISTAN", 50)));
+	@Test
+	public void membersCannotOpenUnopposedPostsButLeadersCan()
+	{
+		WarBoardFight open = new WarBoardFight("1", "other", null, "2026-07-21T20:00:00Z", 30, 70, 126, "", "open");
+		WarBoardFight scheduled = new WarBoardFight("2", "other", "trapistan", "2026-07-22T20:00:00Z", 30, 70, 126, "", "scheduled");
+		assertFalse(ClanWarBoardPanel.canOpenFight(open, false));
+		assertTrue(ClanWarBoardPanel.canOpenFight(open, true));
+		assertTrue(ClanWarBoardPanel.canOpenFight(scheduled, false));
 	}
 
 	@Test
@@ -113,9 +108,27 @@ public class ClanWarBoardPluginTest
 	@Test
 	public void apiClientHelpersAreStable()
 	{
-		assertEquals("https://example.com", ClanWarBoardApiClient.normalizeBaseUrl("https://example.com///"));
-		assertEquals(ClanWarBoardApiClient.DEFAULT_SERVICE_URL, ClanWarBoardApiClient.normalizeBaseUrl(" "));
+		assertTrue(ClanWarBoardApiClient.DEFAULT_SERVICE_URL.startsWith("https://"));
 		assertEquals(2, ClanWarBoardApiClient.countOccurrences("{\"clan_id\":1},{\"clan_id\":2}", "\"clan_id\""));
+	}
+
+	@Test
+	public void authenticatedHeadersAreFreshAndUnique()
+	{
+		Map<String, String> first = ClanWarBoardApiClient.authenticatedHeaders("secret-token");
+		Map<String, String> second = ClanWarBoardApiClient.authenticatedHeaders("secret-token");
+		assertEquals("Bearer secret-token", first.get("Authorization"));
+		assertTrue(first.containsKey("X-CWB-Timestamp"));
+		assertFalse(first.get("X-CWB-Nonce").equals(second.get("X-CWB-Nonce")));
+	}
+
+	@Test
+	public void registrationResponseParsesSessionAndCapabilities()
+	{
+		ClanWarBoardSession session = ClanWarBoardApiClient.parseSession("{\"sessionToken\":\"token-123\",\"expiresAt\":\"2026-07-20T20:00:00+00:00\",\"capabilities\":[\"member:read\",\"leader:write\"]}");
+		assertEquals("token-123", session.getToken());
+		assertTrue(session.hasCapability("leader:write"));
+		assertFalse(session.hasCapability("admin"));
 	}
 
 	@Test

@@ -2,11 +2,14 @@ package com.itmeansbigmountain.clanwarboard;
 
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
+import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
@@ -21,6 +24,8 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
+import net.runelite.api.clan.ClanSettings;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -28,6 +33,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ColorUtil;
 
 @Slf4j
 @PluginDescriptor(
@@ -53,16 +59,42 @@ public class ClanWarBoardPlugin extends Plugin
 	@Inject
 	private ConfigManager configManager;
 
+	@Inject
+	private ClanWarBoardApiClient apiClient;
+
+	@Inject
+	private ScheduledExecutorService executorService;
+
+	@Inject
+	private ClientThread clientThread;
+
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
-	private final ClanWarBoardApiClient apiClient = new ClanWarBoardApiClient();
 	private final ClanWarBoardTelemetryBuffer telemetryBuffer = new ClanWarBoardTelemetryBuffer();
-	private ClanWarBoardApiStatus apiStatus = ClanWarBoardApiStatus.offline("Online Sync has not refreshed yet");
+	private final AtomicBoolean sessionRefreshInFlight = new AtomicBoolean();
+	private volatile ClanWarBoardSession session;
+	private volatile boolean running;
+	private ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
+	private volatile boolean loginMessagePending;
 
 	@Override
 	protected void startUp()
 	{
-		panel = new ClanWarBoardPanel();
+		running = true;
+		panel = new ClanWarBoardPanel(new ClanWarBoardPanel.MatchActionHandler()
+		{
+			@Override
+			public void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes)
+			{
+				ClanWarBoardPlugin.this.submitAvailability(startsAt, duration, combatMin, combatMax, notes);
+			}
+
+			@Override
+			public void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+			{
+				ClanWarBoardPlugin.this.submitChallenge(opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+			}
+		});
 		navButton = NavigationButton.builder()
 			.tooltip(PLUGIN_NAME)
 			.icon(loadIcon())
@@ -78,6 +110,8 @@ public class ClanWarBoardPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		running = false;
+		session = null;
 		clientToolbar.removeNavigation(navButton);
 		navButton = null;
 		panel = null;
@@ -90,11 +124,8 @@ public class ClanWarBoardPlugin extends Plugin
 		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
 		{
 			refreshPanel();
+			loginMessagePending = config.showLoginMessage();
 			refreshOnlineBoard();
-			if (config.showLoginMessage())
-			{
-				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", buildLoginMessage(config, clanAccess()), null);
-			}
 		}
 	}
 
@@ -110,6 +141,7 @@ public class ClanWarBoardPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
+		rotateSessionIfNeeded();
 		int currentTick = client.getTickCount();
 		ClanAccess access = clanAccess();
 		if (telemetryBuffer.shouldHeartbeat(currentTick))
@@ -177,35 +209,135 @@ public class ClanWarBoardPlugin extends Plugin
 			return;
 		}
 		ClanAccess access = clanAccess();
-		boolean leaderView = resolveLeaderView(access, config.minimumLeaderRank(), config.developmentRoleOverride());
-		panel.update(config, access.getClanName(), access.getPlayerName(), access.getRankName(), leaderView, apiStatus);
+		boolean leaderView = resolveLeaderView(access, config.minimumLeaderRank(), session);
+		ClanWarBoardState currentState = boardState;
+		SwingUtilities.invokeLater(() ->
+		{
+			if (running && panel != null)
+			{
+				panel.update(access.getClanName(), access.getPlayerName(), access.getRankName(), leaderView, currentState);
+			}
+		});
 	}
 
 	private void refreshOnlineBoard()
 	{
 		ClanAccess registrationAccess = clanAccess();
+		int currentClanMemberCount = clanMemberCount();
 		String installationId = installationId();
-		CompletableFuture.supplyAsync(() ->
+		executorService.submit(() ->
+		{
+			ClanWarBoardState completedState;
+			try
+			{
+				if (registrationAccess.getClanName() != null && !registrationAccess.getClanName().trim().isEmpty())
+				{
+					session = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking());
+				}
+				completedState = apiClient.fetchBoardState(registrationAccess.getClanName(), currentClanMemberCount);
+			}
+			catch (IOException ex)
+			{
+				log.debug("Clan War Board API refresh failed", ex);
+				completedState = ClanWarBoardState.offline(ex.getMessage());
+			}
+			ClanWarBoardState refreshedState = completedState;
+			clientThread.invoke(() ->
+			{
+				if (running)
+				{
+					boardState = refreshedState;
+					if (loginMessagePending)
+					{
+						loginMessagePending = false;
+						client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", ColorUtil.wrapWithColorTag(buildLoginMessage(boardState), Color.CYAN), null);
+					}
+					refreshPanel();
+				}
+			});
+		});
+	}
+
+	private void rotateSessionIfNeeded()
+	{
+		ClanWarBoardSession current = session;
+		if (current == null || !current.shouldRotate(Instant.now()) || !sessionRefreshInFlight.compareAndSet(false, true))
+		{
+			return;
+		}
+		executorService.submit(() ->
 		{
 			try
 			{
-				apiClient.register(config.serviceUrl(), installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking());
-				return apiClient.fetchStatus(config.serviceUrl());
+				session = apiClient.rotateSession(current);
 			}
-			catch (IOException | InterruptedException ex)
+			catch (IOException ex)
 			{
-				if (ex instanceof InterruptedException)
-				{
-					Thread.currentThread().interrupt();
-				}
-				log.debug("Clan War Board API refresh failed", ex);
-				return ClanWarBoardApiStatus.offline(ex.getMessage());
+				log.debug("Clan War Board session rotation failed", ex);
+				clientThread.invoke(this::refreshOnlineBoard);
 			}
-		}).thenAccept(status -> SwingUtilities.invokeLater(() ->
+			finally
+			{
+				sessionRefreshInFlight.set(false);
+			}
+		});
+	}
+
+	private void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes)
+	{
+		ClanWarBoardSession current = session;
+		if (current == null || !current.hasCapability("leader:write"))
 		{
-			apiStatus = status;
-			refreshPanel();
-		}));
+			showActionMessage("Leader authorization is not available.", Color.RED);
+			return;
+		}
+		executorService.submit(() ->
+		{
+			try
+			{
+				apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(startsAt, duration, combatMin, combatMax, notes));
+				showActionMessage("War post published to the board.", Color.GREEN);
+				clientThread.invoke(this::refreshOnlineBoard);
+			}
+			catch (IOException ex)
+			{
+				showActionMessage("War post failed: " + ex.getMessage(), Color.RED);
+			}
+		});
+	}
+
+	private void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	{
+		ClanWarBoardSession current = session;
+		if (current == null || !current.hasCapability("leader:write"))
+		{
+			showActionMessage("Leader authorization is not available.", Color.RED);
+			return;
+		}
+		executorService.submit(() ->
+		{
+			try
+			{
+				apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
+				showActionMessage("Private challenge sent.", Color.GREEN);
+				clientThread.invoke(this::refreshOnlineBoard);
+			}
+			catch (IOException ex)
+			{
+				showActionMessage("Private challenge failed: " + ex.getMessage(), Color.RED);
+			}
+		});
+	}
+
+	private void showActionMessage(String message, Color color)
+	{
+		clientThread.invoke(() ->
+		{
+			if (running)
+			{
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", ColorUtil.wrapWithColorTag(PLUGIN_NAME + ": " + message, color), null);
+			}
+		});
 	}
 
 	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access)
@@ -239,23 +371,24 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void flushTelemetry(long now)
 	{
+		ClanWarBoardSession current = session;
+		if (current == null)
+		{
+			return;
+		}
 		List<ClanWarBoardTelemetryEvent> batch = telemetryBuffer.drain(now);
 		if (batch.isEmpty())
 		{
 			return;
 		}
-		CompletableFuture.runAsync(() ->
+		executorService.submit(() ->
 		{
 			try
 			{
-				apiClient.submitTelemetry(config.serviceUrl(), batch);
+				apiClient.submitTelemetry(current, batch);
 			}
-			catch (IOException | InterruptedException ex)
+			catch (IOException ex)
 			{
-				if (ex instanceof InterruptedException)
-				{
-					Thread.currentThread().interrupt();
-				}
 				log.debug("Clan War Board telemetry upload failed", ex);
 			}
 		});
@@ -278,6 +411,12 @@ public class ClanWarBoardPlugin extends Plugin
 		return new ClanAccess(playerName, clan.getName(), rankValue);
 	}
 
+	private int clanMemberCount()
+	{
+		ClanSettings settings = client.getClanSettings();
+		return settings == null || settings.getMembers() == null ? 0 : settings.getMembers().size();
+	}
+
 	private String installationId()
 	{
 		String value = configManager.getConfiguration(ClanWarBoardConfig.CONFIG_GROUP, INSTALL_ID_KEY);
@@ -295,23 +434,25 @@ public class ClanWarBoardPlugin extends Plugin
 		return local == null ? null : local.getName();
 	}
 
-	static boolean resolveLeaderView(ClanAccess access, LeaderMinimumRank minimumRank, DevelopmentRoleOverride override)
+	static boolean resolveLeaderView(ClanAccess access, LeaderMinimumRank minimumRank, ClanWarBoardSession session)
 	{
-		if (override == DevelopmentRoleOverride.PRETEND_LEADER)
-		{
-			return true;
-		}
-		if (override == DevelopmentRoleOverride.PRETEND_MEMBER)
-		{
-			return false;
-		}
-		return access.canManageWars(minimumRank);
+		return access.canManageWars(minimumRank) && session != null && session.hasCapability("leader:write");
 	}
 
-	static String buildLoginMessage(ClanWarBoardConfig config, ClanAccess access)
+	static String buildLoginMessage(ClanWarBoardState state)
 	{
-		String mode = resolveLeaderView(access, config.minimumLeaderRank(), config.developmentRoleOverride()) ? "leader setup unlocked" : "member view";
-		return PLUGIN_NAME + ": " + config.warName() + " vs " + config.opponentClan() + " at " + config.hotspot() + " on world " + config.warWorld() + " (" + mode + ")";
+		int open = state == null ? 0 : state.getAvailableCount();
+		StringBuilder message = new StringBuilder(PLUGIN_NAME).append(": ").append(open).append(open == 1 ? " fight needs an opponent" : " fights need an opponent");
+		WarBoardFight next = state == null ? null : state.getNextScheduled();
+		if (next != null)
+		{
+			message.append(". Next: ").append(next.getClanId()).append(" vs ").append(next.getOpponentClanId()).append(" at ").append(next.getStartsAt());
+		}
+		else
+		{
+			message.append(". No future war is scheduled");
+		}
+		return message.toString();
 	}
 
 	private static BufferedImage loadIcon()
