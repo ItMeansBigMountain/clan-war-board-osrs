@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -169,6 +170,21 @@ public class ClanWarBoardPluginTest
 		assertTrue(buffer.shouldFlush(1L));
 		assertEquals(ClanWarBoardTelemetryBuffer.MAX_EVENTS_PER_BATCH, buffer.drain(1L).size());
 		assertEquals(1, buffer.size());
+		List<ClanWarBoardTelemetryEvent> failed = buffer.drain(20_000L);
+		assertEquals(1, failed.size());
+		buffer.requeue(failed);
+		assertEquals(1, buffer.size());
+	}
+
+	@Test
+	public void playerMetricsPreserveAllTrackedDamageCategories()
+	{
+		PlayerWarMetrics metrics = new PlayerWarMetrics(2, 5, 3, 7, 410, 12, 422, 355, 9, 80, 120);
+		assertEquals(410, metrics.getOpponentDamage());
+		assertEquals(12, metrics.getFriendlyFireDamage());
+		assertEquals(422, metrics.getDamageInflicted());
+		assertEquals(355, metrics.getDamageReceived());
+		assertEquals(9, metrics.getThirdPartyDamage());
 	}
 
 	public static void main(String[] args) throws Exception

@@ -14,7 +14,7 @@ final class ClanWarBoardTelemetryBuffer
 	private long lastFlushMillis = 0L;
 	private int lastHeartbeatTick = -HEARTBEAT_TICK_INTERVAL;
 
-	void add(ClanWarBoardTelemetryEvent event)
+	synchronized void add(ClanWarBoardTelemetryEvent event)
 	{
 		if (event == null)
 		{
@@ -27,7 +27,7 @@ final class ClanWarBoardTelemetryBuffer
 		}
 	}
 
-	boolean shouldHeartbeat(int tick)
+	synchronized boolean shouldHeartbeat(int tick)
 	{
 		if (tick - lastHeartbeatTick < HEARTBEAT_TICK_INTERVAL)
 		{
@@ -37,12 +37,12 @@ final class ClanWarBoardTelemetryBuffer
 		return true;
 	}
 
-	boolean shouldFlush(long nowMillis)
+	synchronized boolean shouldFlush(long nowMillis)
 	{
 		return !pending.isEmpty() && (pending.size() >= MAX_EVENTS_PER_BATCH || nowMillis - lastFlushMillis >= MIN_FLUSH_INTERVAL.toMillis());
 	}
 
-	List<ClanWarBoardTelemetryEvent> drain(long nowMillis)
+	synchronized List<ClanWarBoardTelemetryEvent> drain(long nowMillis)
 	{
 		if (pending.isEmpty())
 		{
@@ -55,7 +55,21 @@ final class ClanWarBoardTelemetryBuffer
 		return batch;
 	}
 
-	int size()
+	synchronized void requeue(List<ClanWarBoardTelemetryEvent> batch)
+	{
+		if (batch == null || batch.isEmpty())
+		{
+			return;
+		}
+		pending.addAll(0, batch);
+		int maximum = MAX_EVENTS_PER_BATCH * 4;
+		if (pending.size() > maximum)
+		{
+			pending.subList(maximum, pending.size()).clear();
+		}
+	}
+
+	synchronized int size()
 	{
 		return pending.size();
 	}

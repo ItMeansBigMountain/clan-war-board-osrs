@@ -23,6 +23,7 @@ class ClanWarBoardPanel extends PluginPanel
 {
 	interface MatchActionHandler
 	{
+		void reloadAll();
 		void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes);
 		void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules);
 	}
@@ -50,6 +51,7 @@ class ClanWarBoardPanel extends PluginPanel
 	private BoardFilter filter = BoardFilter.OPEN;
 	private WarBoardFight selectedFight;
 	private String privateOpponent = "";
+	private boolean reloading;
 
 	ClanWarBoardPanel(MatchActionHandler actionHandler)
 	{
@@ -72,6 +74,12 @@ class ClanWarBoardPanel extends PluginPanel
 		this.rankName = rankName;
 		this.leader = leader;
 		this.state = state == null ? ClanWarBoardState.offline("Waiting for service refresh") : state;
+		render();
+	}
+
+	void setReloading(boolean reloading)
+	{
+		this.reloading = reloading;
 		render();
 	}
 
@@ -109,13 +117,25 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void addNavigation()
 	{
-		JPanel nav = new JPanel(new GridLayout(1, 3, 4, 0));
+		JPanel nav = new JPanel(new GridLayout(1, 4, 3, 0));
 		nav.setOpaque(false);
 		nav.setAlignmentX(Component.LEFT_ALIGNMENT);
 		nav.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
 		nav.add(navButton("Clan", Tab.OVERVIEW));
 		nav.add(navButton("Board", Tab.BOARD));
 		nav.add(navButton("Private", Tab.PRIVATE));
+		JButton reload = new JButton(reloading ? "…" : "↻");
+		reload.setToolTipText("Reload all Clan War Board data");
+		reload.setFocusable(false);
+		reload.setEnabled(!reloading);
+		reload.setForeground(Color.WHITE);
+		reload.setBackground(CARD_BG);
+		reload.addActionListener(event -> {
+			reloading = true;
+			render();
+			actionHandler.reloadAll();
+		});
+		nav.add(reload);
 		content.add(nav);
 		content.add(Box.createVerticalStrut(8));
 	}
@@ -139,6 +159,20 @@ class ClanWarBoardPanel extends PluginPanel
 			"Plugin coverage: " + state.getInstalledMembers() + "/" + state.getClanMembers() + " members",
 			leader ? "Leader tools: enabled" : "War posts: read-only"
 		}, leader ? ACCENT : MUTED);
+		PlayerWarMetrics metrics = state.getPlayerMetrics();
+		addCard("My war statistics", new String[] {
+			"Fights observed: " + metrics.getFightsObserved(),
+			"Observed kills: " + metrics.getObservedKills(),
+			"Deaths: " + metrics.getDeaths(),
+			"Returns: " + metrics.getReturns(),
+			"Opponent damage: " + metrics.getOpponentDamage(),
+			"Friendly-fire damage: " + metrics.getFriendlyFireDamage(),
+			"Total damage inflicted: " + metrics.getDamageInflicted(),
+			"Damage received: " + metrics.getDamageReceived(),
+			"Third-party damage: " + metrics.getThirdPartyDamage(),
+			"Activity samples: " + metrics.getActivitySamples(),
+			"Tracked war events: " + metrics.getEventsTracked()
+		}, ACCENT);
 		addCard("Fight record", new String[] {
 			"Previous fights: " + state.getHistory().size(),
 			"Scheduled fights: " + state.getScheduled().size(),

@@ -39,7 +39,7 @@ final class ClanWarBoardApiClient
 		this.gson = gson;
 	}
 
-	ClanWarBoardState fetchBoardState(String clanName, int clanMemberCount) throws IOException
+	ClanWarBoardState fetchBoardState(String clanName, int clanMemberCount, ClanWarBoardSession session) throws IOException
 	{
 		String health = get("/api/health");
 		if (!health.contains("\"ok\": true") && !health.contains("\"ok\":true"))
@@ -62,8 +62,21 @@ final class ClanWarBoardApiClient
 		List<WarBoardFight> open = parseFights(availability, "availability");
 		List<WarBoardFight> scheduled = parseFights(availability, "scheduled");
 		List<WarBoardFight> history = parseFights(availability, "history");
+		PlayerWarMetrics metrics = session == null ? PlayerWarMetrics.empty()
+			: parsePlayerMetrics(get("/api/plugin/me/metrics", authenticatedHeaders(session.getToken())));
 		ClanWarBoardApiStatus status = ClanWarBoardApiStatus.online("Connected to Clan War Board", clanRows.size(), open.size());
-		return new ClanWarBoardState(status, installedMembers, clanMemberCount, open, scheduled, history);
+		return new ClanWarBoardState(status, installedMembers, clanMemberCount, open, scheduled, history, metrics);
+	}
+
+	private PlayerWarMetrics parsePlayerMetrics(String json)
+	{
+		JsonObject root = gson.fromJson(json, JsonObject.class);
+		JsonObject metrics = root == null || !root.has("metrics") ? new JsonObject() : root.getAsJsonObject("metrics");
+		return new PlayerWarMetrics(integer(metrics, "fightsObserved"), integer(metrics, "observedKills"),
+			integer(metrics, "deaths"), integer(metrics, "returns"), integer(metrics, "opponentDamage"),
+			integer(metrics, "friendlyFireDamage"), integer(metrics, "damageInflicted"),
+			integer(metrics, "damageReceived"), integer(metrics, "thirdPartyDamage"),
+			integer(metrics, "activitySamples"), integer(metrics, "eventsTracked"));
 	}
 
 	ClanWarBoardSession register(String installId, ClanAccess access, String pluginVersion, boolean publicStats) throws IOException
@@ -213,13 +226,18 @@ final class ClanWarBoardApiClient
 
 	private String get(String path) throws IOException
 	{
-		Request request = new Request.Builder()
+		return get(path, Collections.emptyMap());
+	}
+
+	private String get(String path, Map<String, String> headers) throws IOException
+	{
+		Request.Builder builder = new Request.Builder()
 			.url(DEFAULT_SERVICE_URL + path)
 			.header("Accept", "application/json")
 			.header("User-Agent", USER_AGENT)
-			.header("X-Clan-War-Board-Client", "runelite")
-			.build();
-		return execute(request);
+			.header("X-Clan-War-Board-Client", "runelite");
+		headers.forEach(builder::header);
+		return execute(builder.build());
 	}
 
 	private String post(String path, String json, Map<String, String> headers) throws IOException

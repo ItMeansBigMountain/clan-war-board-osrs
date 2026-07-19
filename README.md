@@ -6,11 +6,12 @@ Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
 
 ## Panel workflow
 
-The side panel has three fixed navigation tabs:
+The side panel has three fixed navigation tabs and one global reload action:
 
-1. **Clan** — clan overview, installed-plugin coverage, prior-fight count, scheduled-fight count, open-post count, and the next planned war.
+1. **Clan** — clan overview, installed-plugin coverage, fight counts, next war, and the authenticated player's persisted aggregate war metrics.
 2. **Board** — switch between **Needs opponent** and **Scheduled**. Members can read open posts but cannot open or accept them. Server-authorized leaders can open a post and continue to private scheduling.
 3. **Private** — server-authorized leaders can publish a public availability post or send exact private terms to another clan.
+4. **↻** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter. Existing startup, login, clan-change, and post-action refreshes remain active.
 
 Fight details use in-panel back navigation, so returning from a detail page keeps the user in the same tab and list filter.
 
@@ -60,6 +61,8 @@ Depending on the action and privacy setting, the plugin transmits:
 
 Bearer session credentials are never displayed in configuration or written to normal logs. Exact accepted world, location, and rules are excluded from the public scheduled-fight response.
 
+Telemetry is persisted only when the event matches a confirmed fight's participating clan, world, and scheduled time window. Private aggregates are keyed by a one-way normalized player/clan hash and returned only to an authenticated session for that player. The Clan overview reports fights observed, observed kill candidates, deaths, returns, opponent damage, friendly-fire damage, total damage inflicted, damage received, third-party damage, activity samples, and accepted event count. Failed batches are requeued and deterministic event IDs prevent retry double-counting.
+
 ## Build and test
 
 Use Java 11:
@@ -79,7 +82,7 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 ## Manual verification
 
 1. Confirm the settings page contains no service URL, development role, or war form fields.
-2. Confirm the panel shows Clan, Board, and Private tabs at the top.
+2. Confirm the panel shows Clan, Board, Private, and ↻ controls at the top.
 3. Confirm Board shows Needs opponent and Scheduled filters.
 4. Confirm a member cannot open an unopposed post.
 5. Confirm a server-authorized leader can open an unopposed post and proceed to private setup.
@@ -87,3 +90,4 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 7. Confirm the Clan tab shows installed/total members as `installed/roster`.
 8. Confirm login text is visible and reflects current board data.
 9. Confirm empty API collections remain truthful empty states.
+10. Confirm ↻ preserves the current page/filter, disables while loading, and refreshes the Clan metrics card.
