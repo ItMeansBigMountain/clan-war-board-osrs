@@ -35,6 +35,11 @@ final class ClanWarBoardState
 		return Collections.unmodifiableList(new ArrayList<>(value == null ? Collections.emptyList() : value));
 	}
 
+	ClanWarBoardState withClanMembers(int memberCount)
+	{
+		return new ClanWarBoardState(status, installedMembers, memberCount, available, scheduled, history);
+	}
+
 	ClanWarBoardApiStatus getStatus() { return status; }
 	int getInstalledMembers() { return installedMembers; }
 	int getClanMembers() { return clanMembers; }

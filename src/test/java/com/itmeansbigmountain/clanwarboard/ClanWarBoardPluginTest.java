@@ -71,6 +71,7 @@ public class ClanWarBoardPluginTest
 		assertTrue(new ClanAccess("Deputy", "TRAPISTAN", 125).canManageWars(LeaderMinimumRank.DEPUTY_OWNER));
 		assertFalse(new ClanAccess("Member", "TRAPISTAN", 50).canManageWars(LeaderMinimumRank.ADMINISTRATOR));
 		assertFalse(ClanAccess.noClan("Solo").canManageWars(LeaderMinimumRank.ADMINISTRATOR));
+		assertEquals("General", new ClanAccess("Oyama", "Rs Venom", 3, "General").getRankName());
 	}
 
 	@Test
@@ -93,6 +94,18 @@ public class ClanWarBoardPluginTest
 		assertFalse(ClanWarBoardPanel.canOpenFight(open, false));
 		assertTrue(ClanWarBoardPanel.canOpenFight(open, true));
 		assertTrue(ClanWarBoardPanel.canOpenFight(scheduled, false));
+		assertTrue(ClanWarBoardPanel.canCreateFight(true));
+		assertFalse(ClanWarBoardPanel.canCreateFight(false));
+	}
+
+	@Test
+	public void lateClanRosterReplacesStaleZeroCoverageDenominator()
+	{
+		ClanWarBoardState stale = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 1, 0), 1, 0,
+			Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+		ClanWarBoardState refreshed = stale.withClanMembers(60);
+		assertEquals(1, refreshed.getInstalledMembers());
+		assertEquals(60, refreshed.getClanMembers());
 	}
 
 	@Test

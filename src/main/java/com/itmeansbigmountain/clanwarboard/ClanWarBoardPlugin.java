@@ -24,7 +24,10 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
+import net.runelite.api.clan.ClanMember;
 import net.runelite.api.clan.ClanSettings;
+import net.runelite.api.clan.ClanTitle;
+import net.runelite.api.events.ClanChannelChanged;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -76,6 +79,7 @@ public class ClanWarBoardPlugin extends Plugin
 	private volatile boolean running;
 	private ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
 	private volatile boolean loginMessagePending;
+	private String lastClanFingerprint;
 
 	@Override
 	protected void startUp()
@@ -139,10 +143,23 @@ public class ClanWarBoardPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onClanChannelChanged(ClanChannelChanged event)
+	{
+		if (!event.isGuest())
+		{
+			refreshClanSnapshotIfChanged();
+		}
+	}
+
+	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
 		rotateSessionIfNeeded();
 		int currentTick = client.getTickCount();
+		if (currentTick % 5 == 0)
+		{
+			refreshClanSnapshotIfChanged();
+		}
 		ClanAccess access = clanAccess();
 		if (telemetryBuffer.shouldHeartbeat(currentTick))
 		{
@@ -202,6 +219,20 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 	}
 
+	private void refreshClanSnapshotIfChanged()
+	{
+		ClanAccess access = clanAccess();
+		int members = clanMemberCount();
+		String fingerprint = String.valueOf(access.getClanName()) + "|" + access.getRankValue() + "|" + members;
+		if (fingerprint.equals(lastClanFingerprint))
+		{
+			return;
+		}
+		lastClanFingerprint = fingerprint;
+		refreshPanel();
+		refreshOnlineBoard();
+	}
+
 	private void refreshPanel()
 	{
 		if (panel == null)
@@ -210,7 +241,7 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 		ClanAccess access = clanAccess();
 		boolean leaderView = resolveLeaderView(access, config.minimumLeaderRank(), session);
-		ClanWarBoardState currentState = boardState;
+		ClanWarBoardState currentState = boardState.withClanMembers(clanMemberCount());
 		SwingUtilities.invokeLater(() ->
 		{
 			if (running && panel != null)
@@ -397,6 +428,19 @@ public class ClanWarBoardPlugin extends Plugin
 	private ClanAccess clanAccess()
 	{
 		String playerName = localPlayerName();
+		ClanSettings settings = client.getClanSettings();
+		if (settings != null)
+		{
+			ClanMember member = playerName == null ? null : settings.findMember(playerName);
+			if (member == null)
+			{
+				return ClanAccess.noRank(playerName, settings.getName());
+			}
+			int rankValue = member.getRank() == null ? -1 : member.getRank().getRank();
+			ClanTitle title = member.getRank() == null ? null : settings.titleForRank(member.getRank());
+			return new ClanAccess(playerName, settings.getName(), rankValue, title == null ? null : title.getName());
+		}
+
 		ClanChannel clan = client.getClanChannel();
 		if (clan == null)
 		{

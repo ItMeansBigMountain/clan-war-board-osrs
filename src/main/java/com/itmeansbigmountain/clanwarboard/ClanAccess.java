@@ -5,12 +5,19 @@ class ClanAccess
 	private final String playerName;
 	private final String clanName;
 	private final int rankValue;
+	private final String rankName;
 
 	ClanAccess(String playerName, String clanName, int rankValue)
+	{
+		this(playerName, clanName, rankValue, null);
+	}
+
+	ClanAccess(String playerName, String clanName, int rankValue, String rankName)
 	{
 		this.playerName = playerName;
 		this.clanName = clanName;
 		this.rankValue = rankValue;
+		this.rankName = rankName;
 	}
 
 	static ClanAccess noClan(String playerName)
@@ -45,6 +52,10 @@ class ClanAccess
 
 	String getRankName()
 	{
+		if (rankName != null && !rankName.trim().isEmpty())
+		{
+			return rankName;
+		}
 		if (rankValue >= 126)
 		{
 			return "Owner";

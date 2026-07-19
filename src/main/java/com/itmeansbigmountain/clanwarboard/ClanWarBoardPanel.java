@@ -80,6 +80,11 @@ class ClanWarBoardPanel extends PluginPanel
 		return fight != null && (!fight.needsOpponent() || leader);
 	}
 
+	static boolean canCreateFight(boolean leader)
+	{
+		return leader;
+	}
+
 	private void render()
 	{
 		content.removeAll();
@@ -148,6 +153,29 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void renderBoard()
 	{
+		JPanel header = new JPanel(new BorderLayout());
+		header.setOpaque(false);
+		header.setAlignmentX(Component.LEFT_ALIGNMENT);
+		header.setMaximumSize(new Dimension(CONTENT_WIDTH, 32));
+		header.add(label("Fights", 14, Font.BOLD, TEXT), BorderLayout.WEST);
+		if (canCreateFight(leader))
+		{
+			JButton create = new JButton("+");
+			create.setToolTipText("Create fight");
+			create.setFocusable(false);
+			create.setPreferredSize(new Dimension(38, 30));
+			create.setForeground(Color.WHITE);
+			create.setBackground(new Color(62, 94, 125));
+			create.addActionListener(event -> {
+				privateOpponent = "";
+				tab = Tab.PRIVATE;
+				selectedFight = null;
+				render();
+			});
+			header.add(create, BorderLayout.EAST);
+		}
+		content.add(header);
+		content.add(Box.createVerticalStrut(6));
 		JPanel filters = new JPanel(new GridLayout(1, 2, 4, 0));
 		filters.setOpaque(false);
 		filters.setAlignmentX(Component.LEFT_ALIGNMENT);
