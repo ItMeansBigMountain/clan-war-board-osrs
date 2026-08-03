@@ -83,6 +83,10 @@ class ClanWarBoardPanel extends PluginPanel
 		this.rankName = rankName;
 		this.leader = leader;
 		this.state = state == null ? ClanWarBoardState.offline("Waiting for service refresh") : state;
+		if (selectedFight != null)
+		{
+			selectedFight = this.state.findFightById(selectedFight.getId());
+		}
 		updateFooter();
 		render();
 	}
@@ -102,6 +106,11 @@ class ClanWarBoardPanel extends PluginPanel
 	static boolean canCreateFight(boolean leader)
 	{
 		return leader;
+	}
+
+	static String openFightCountLabel(int count)
+	{
+		return "Open posts: " + Math.max(0, count);
 	}
 
 	private void render()
@@ -216,7 +225,7 @@ class ClanWarBoardPanel extends PluginPanel
 		addCard("Fight record", new String[] {
 			"Previous fights: " + state.getHistory().size(),
 			"Scheduled fights: " + state.getScheduled().size(),
-			"Fights needing an opponent: " + state.getAvailableCount()
+			openFightCountLabel(state.getAvailableCount())
 		}, TEXT);
 		WarBoardFight next = state.getNextScheduled();
 		addCard("Next planned war", next == null
@@ -370,6 +379,9 @@ class ClanWarBoardPanel extends PluginPanel
 			"Leave opponent blank to publish an open war post.",
 			"Enter an opponent clan to send exact private terms."
 		}, ACCENT);
+		JLabel formError = wrapped("", 11, new Color(235, 135, 115));
+		formError.setVisible(false);
+		content.add(formError);
 		JTextField opponent = field(privateOpponent);
 		JTextField startsAt = field("");
 		JTextField duration = field("30");
@@ -395,6 +407,22 @@ class ClanWarBoardPanel extends PluginPanel
 		submit.setAlignmentX(Component.LEFT_ALIGNMENT);
 		submit.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
 		submit.addActionListener(event -> {
+			String validation;
+			if (opponent.getText().trim().isEmpty())
+			{
+				validation = MatchDraftValidator.validateAvailability(startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText());
+			}
+			else
+			{
+				validation = MatchDraftValidator.validateChallenge(opponent.getText(), startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), world.getText(), location.getText());
+			}
+			if (validation != null)
+			{
+				formError.setText("<html><body style='width:" + (CONTENT_WIDTH - 30) + "px'>" + escape(validation) + "</body></html>");
+				formError.setVisible(true);
+				return;
+			}
+			formError.setVisible(false);
 			if (opponent.getText().trim().isEmpty())
 			{
 				actionHandler.submitAvailability(startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), rules.getText());

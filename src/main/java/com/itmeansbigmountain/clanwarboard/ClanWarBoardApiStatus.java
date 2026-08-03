@@ -20,6 +20,11 @@ final class ClanWarBoardApiStatus
 		return new ClanWarBoardApiStatus(false, message, 0, 0);
 	}
 
+	ClanWarBoardApiStatus asOffline(String offlineMessage)
+	{
+		return new ClanWarBoardApiStatus(false, offlineMessage, clanCount, openFightCount);
+	}
+
 	static ClanWarBoardApiStatus online(String message, int clanCount, int openFightCount)
 	{
 		return new ClanWarBoardApiStatus(true, message, clanCount, openFightCount);

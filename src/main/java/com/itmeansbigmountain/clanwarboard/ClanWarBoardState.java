@@ -3,6 +3,8 @@ package com.itmeansbigmountain.clanwarboard;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 
 final class ClanWarBoardState
 {
@@ -49,6 +51,12 @@ final class ClanWarBoardState
 		return new ClanWarBoardState(status, installedMembers, memberCount, available, scheduled, history, playerMetrics);
 	}
 
+	ClanWarBoardState withOfflineStatus(String message)
+	{
+		return new ClanWarBoardState(status.asOffline(message), installedMembers, clanMembers,
+			available, scheduled, history, playerMetrics);
+	}
+
 	ClanWarBoardApiStatus getStatus() { return status; }
 	int getInstalledMembers() { return installedMembers; }
 	int getClanMembers() { return clanMembers; }
@@ -57,5 +65,51 @@ final class ClanWarBoardState
 	List<WarBoardFight> getHistory() { return history; }
 	PlayerWarMetrics getPlayerMetrics() { return playerMetrics; }
 	int getAvailableCount() { return available.size(); }
-	WarBoardFight getNextScheduled() { return scheduled.isEmpty() ? null : scheduled.get(0); }
+	WarBoardFight findFightById(String id)
+	{
+		if (id == null || id.isEmpty())
+		{
+			return null;
+		}
+		WarBoardFight fight = findFightById(available, id);
+		if (fight == null)
+		{
+			fight = findFightById(scheduled, id);
+		}
+		return fight == null ? findFightById(history, id) : fight;
+	}
+
+	private static WarBoardFight findFightById(List<WarBoardFight> fights, String id)
+	{
+		for (WarBoardFight fight : fights)
+		{
+			if (id.equals(fight.getId()))
+			{
+				return fight;
+			}
+		}
+		return null;
+	}
+	WarBoardFight getNextScheduled()
+	{
+		WarBoardFight next = null;
+		Instant nextStart = null;
+		for (WarBoardFight fight : scheduled)
+		{
+			try
+			{
+				Instant start = Instant.parse(fight.getStartsAt());
+				if (nextStart == null || start.isBefore(nextStart))
+				{
+					next = fight;
+					nextStart = start;
+				}
+			}
+			catch (DateTimeParseException ignored)
+			{
+				// Invalid service rows are not eligible to become the next scheduled fight.
+			}
+		}
+		return next;
+	}
 }

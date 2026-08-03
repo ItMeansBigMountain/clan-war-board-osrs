@@ -14,9 +14,11 @@ The side panel follows RuneLite's compact group-finder pattern: five fixed-width
 4. **H — History** — browse completed, service-verified fights and open their details without mixing them into the active board.
 5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter.
 
-The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time.
+The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time. A transient service failure preserves the last good immutable board snapshot and marks it offline instead of showing a false empty board. Refresh responses are bound to the player/clan identity that started them; stale responses are rejected and immediately followed by a refresh for the current identity.
 
-Fight details use in-panel back navigation, so returning from a detail page keeps the user in the same tab and list filter.
+Fight details use in-panel back navigation, so returning from a detail page keeps the user in the same tab and list filter. Open details reconcile by stable fight ID after refresh and close cleanly if the service removes the fight. Scheduled fights are selected chronologically rather than trusting response order.
+
+The create form validates ISO-8601 UTC time, duration, combat range, world, and private location before submission. Validation is shown inline without clearing the entered terms, and only one create/challenge request may be active at once.
 
 No fights or clans are fabricated. Empty service collections produce explicit empty states.
 
@@ -98,3 +100,7 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 10. Confirm History shows only completed service fights and preserves its own back navigation.
 11. Confirm ↻ preserves the current page/filter, disables while loading, and refreshes the Clan metrics card.
 12. Confirm passive board refresh runs no more than once per 60 seconds and never overlaps another refresh.
+13. Confirm a failed refresh keeps the last board cards visible while the footer reports offline/cached state.
+14. Confirm changing player or primary clan during a refresh cannot install the previous identity's response.
+15. Confirm invalid time, duration, combat range, world, or location stays in the form with an inline error and sends no request.
+16. Confirm repeated submission clicks cannot create duplicate in-flight fight requests.

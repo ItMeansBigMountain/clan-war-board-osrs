@@ -82,9 +82,10 @@ public class ClanWarBoardPlugin extends Plugin
 	private final CombatSignalTracker combatSignals = new CombatSignalTracker();
 	private final AtomicBoolean sessionRefreshInFlight = new AtomicBoolean();
 	private final AtomicBoolean boardRefreshInFlight = new AtomicBoolean();
+	private final AtomicBoolean matchActionInFlight = new AtomicBoolean();
 	private volatile ClanWarBoardSession session;
 	private volatile boolean running;
-	private ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
+	private volatile ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
 	private volatile boolean loginMessagePending;
 	private String lastClanFingerprint;
 
@@ -297,6 +298,8 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 		setPanelReloading(true);
 		ClanAccess registrationAccess = clanAccess();
+		String refreshContext = refreshContext(registrationAccess);
+		ClanWarBoardState previousState = boardState;
 		int currentClanMemberCount = clanMemberCount();
 		String installationId = installationId();
 		executorService.submit(() ->
@@ -313,14 +316,15 @@ public class ClanWarBoardPlugin extends Plugin
 			catch (IOException ex)
 			{
 				log.debug("Clan War Board API refresh failed", ex);
-				completedState = ClanWarBoardState.offline(ex.getMessage());
+				completedState = previousState.withOfflineStatus(ex.getMessage());
 			}
 			ClanWarBoardState refreshedState = completedState;
 			clientThread.invoke(() ->
 			{
+				boolean contextCurrent = isRefreshContextCurrent(refreshContext, refreshContext(clanAccess()));
 				try
 				{
-					if (running)
+					if (running && contextCurrent)
 					{
 						boardState = refreshedState;
 						if (loginMessagePending)
@@ -335,9 +339,28 @@ public class ClanWarBoardPlugin extends Plugin
 				{
 					boardRefreshInFlight.set(false);
 					setPanelReloading(false);
+					if (running && !contextCurrent)
+					{
+						refreshOnlineBoard();
+					}
 				}
 			});
 		});
+	}
+
+	private static String refreshContext(ClanAccess access)
+	{
+		return access == null ? "|" : String.valueOf(access.getPlayerName()) + "|" + String.valueOf(access.getClanName());
+	}
+
+	static boolean isRefreshContextCurrent(String expected, String current)
+	{
+		return expected != null && expected.equals(current);
+	}
+
+	static boolean tryBeginAction(AtomicBoolean inFlight)
+	{
+		return inFlight != null && inFlight.compareAndSet(false, true);
 	}
 
 	private void setPanelReloading(boolean reloading)
@@ -384,6 +407,11 @@ public class ClanWarBoardPlugin extends Plugin
 			showActionMessage("Leader authorization is not available.", Color.RED);
 			return;
 		}
+		if (!tryBeginAction(matchActionInFlight))
+		{
+			showActionMessage("A fight update is already being sent.", Color.CYAN);
+			return;
+		}
 		executorService.submit(() ->
 		{
 			try
@@ -396,6 +424,10 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				showActionMessage("War post failed: " + ex.getMessage(), Color.RED);
 			}
+			finally
+			{
+				matchActionInFlight.set(false);
+			}
 		});
 	}
 
@@ -405,6 +437,11 @@ public class ClanWarBoardPlugin extends Plugin
 		if (current == null || !current.hasCapability("leader:write"))
 		{
 			showActionMessage("Leader authorization is not available.", Color.RED);
+			return;
+		}
+		if (!tryBeginAction(matchActionInFlight))
+		{
+			showActionMessage("A fight update is already being sent.", Color.CYAN);
 			return;
 		}
 		executorService.submit(() ->
@@ -418,6 +455,10 @@ public class ClanWarBoardPlugin extends Plugin
 			catch (IOException ex)
 			{
 				showActionMessage("Private challenge failed: " + ex.getMessage(), Color.RED);
+			}
+			finally
+			{
+				matchActionInFlight.set(false);
 			}
 		});
 	}

@@ -3,6 +3,7 @@ package com.itmeansbigmountain.clanwarboard;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Map;
@@ -62,6 +63,7 @@ public class ClanWarBoardPluginTest
 	public void boardRefreshCadenceIsBoundedAndReviewFriendly()
 	{
 		assertEquals(60L, ClanWarBoardPlugin.AUTO_REFRESH_SECONDS);
+		assertEquals("Open posts: 12", ClanWarBoardPanel.openFightCountLabel(12));
 	}
 
 	@Test
@@ -156,6 +158,72 @@ public class ClanWarBoardPluginTest
 		ClanWarBoardState refreshed = stale.withClanMembers(60);
 		assertEquals(1, refreshed.getInstalledMembers());
 		assertEquals(60, refreshed.getClanMembers());
+	}
+
+	@Test
+	public void failedRefreshPreservesLastGoodBoardAndMarksItOffline()
+	{
+		WarBoardFight open = new WarBoardFight("open", "rivals", null, "2026-08-04T20:00:00Z", 30, 70, 126, "", "open");
+		ClanWarBoardState online = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 2, 1), 11, 60,
+			Collections.singletonList(open), Collections.emptyList(), Collections.emptyList());
+		ClanWarBoardState stale = online.withOfflineStatus("connection reset");
+		assertFalse(stale.getStatus().isOnline());
+		assertTrue(stale.getStatus().getMessage().contains("connection reset"));
+		assertEquals(1, stale.getAvailable().size());
+		assertEquals(11, stale.getInstalledMembers());
+		assertEquals(60, stale.getClanMembers());
+		assertEquals(2, stale.getStatus().getClanCount());
+		assertEquals(1, stale.getStatus().getOpenFightCount());
+	}
+
+	@Test
+	public void nextScheduledFightIsChronologicalNotResponseOrder()
+	{
+		WarBoardFight later = new WarBoardFight("later", "a", "b", "2026-08-05T20:00:00Z", 30, 70, 126, "", "scheduled");
+		WarBoardFight earlier = new WarBoardFight("earlier", "a", "b", "2026-08-04T20:00:00Z", 30, 70, 126, "", "scheduled");
+		ClanWarBoardState state = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 1, 0), 1, 2,
+			Collections.emptyList(), java.util.Arrays.asList(later, earlier), Collections.emptyList());
+		assertEquals("earlier", state.getNextScheduled().getId());
+	}
+
+	@Test
+	public void matchDraftValidationRejectsSilentFallbacksAndInvalidRanges()
+	{
+		assertEquals("Start time is required.", MatchDraftValidator.validateAvailability("", "30", "70", "126"));
+		assertEquals("Start time must be ISO-8601 UTC.", MatchDraftValidator.validateAvailability("tomorrow", "30", "70", "126"));
+		assertEquals("Duration must be between 1 and 180 minutes.", MatchDraftValidator.validateAvailability("2026-08-04T20:00:00Z", "0", "70", "126"));
+		assertEquals("Combat minimum cannot exceed combat maximum.", MatchDraftValidator.validateAvailability("2026-08-04T20:00:00Z", "30", "126", "70"));
+		assertEquals("World must be between 301 and 599.", MatchDraftValidator.validateChallenge("rivals", "2026-08-04T20:00:00Z", "30", "70", "126", "not-a-world", "Wilderness"));
+		assertEquals("Location is required for a private challenge.", MatchDraftValidator.validateChallenge("rivals", "2026-08-04T20:00:00Z", "30", "70", "126", "330", ""));
+		assertNull(MatchDraftValidator.validateChallenge("rivals", "2026-08-04T20:00:00Z", "30", "70", "126", "330", "Ghorrock"));
+	}
+
+	@Test
+	public void refreshResultsOnlyApplyToTheCapturedClanIdentity()
+	{
+		assertTrue(ClanWarBoardPlugin.isRefreshContextCurrent("Oyama|TRAPISTAN", "Oyama|TRAPISTAN"));
+		assertFalse(ClanWarBoardPlugin.isRefreshContextCurrent("Oyama|TRAPISTAN", "Oyama|OTHER"));
+		assertFalse(ClanWarBoardPlugin.isRefreshContextCurrent("Oyama|TRAPISTAN", "Other|TRAPISTAN"));
+	}
+
+	@Test
+	public void duplicateMatchActionsAreRejectedUntilCompletion()
+	{
+		java.util.concurrent.atomic.AtomicBoolean inFlight = new java.util.concurrent.atomic.AtomicBoolean();
+		assertTrue(ClanWarBoardPlugin.tryBeginAction(inFlight));
+		assertFalse(ClanWarBoardPlugin.tryBeginAction(inFlight));
+		inFlight.set(false);
+		assertTrue(ClanWarBoardPlugin.tryBeginAction(inFlight));
+	}
+
+	@Test
+	public void refreshedFightSnapshotsReconcileByStableId()
+	{
+		WarBoardFight refreshed = new WarBoardFight("fight-1", "rivals", "trapistan", "2026-08-04T20:00:00Z", 45, 70, 126, "new terms", "scheduled");
+		ClanWarBoardState state = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 2, 0), 1, 2,
+			Collections.emptyList(), Collections.singletonList(refreshed), Collections.emptyList());
+		assertEquals(refreshed, state.findFightById("fight-1"));
+		assertNull(state.findFightById("removed"));
 	}
 
 	@Test
