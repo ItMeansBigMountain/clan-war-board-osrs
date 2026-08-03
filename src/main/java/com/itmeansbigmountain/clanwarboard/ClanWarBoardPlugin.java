@@ -84,8 +84,14 @@ public class ClanWarBoardPlugin extends Plugin
 	private final AtomicBoolean boardRefreshInFlight = new AtomicBoolean();
 	private final AtomicBoolean matchActionInFlight = new AtomicBoolean();
 	private volatile ClanWarBoardSession session;
+	private volatile String sessionContext = "|";
+	private volatile long sessionGeneration;
+	private volatile String activeContext = "|";
+	private volatile long identityGeneration;
 	private volatile boolean running;
 	private volatile ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
+	private volatile String boardStateContext = "|";
+	private volatile long boardStateGeneration;
 	private volatile boolean loginMessagePending;
 	private String lastClanFingerprint;
 
@@ -138,6 +144,13 @@ public class ClanWarBoardPlugin extends Plugin
 			autoRefreshTask = null;
 		}
 		session = null;
+		sessionContext = "|";
+		sessionGeneration = 0L;
+		activeContext = "|";
+		identityGeneration++;
+		boardStateContext = "|";
+		boardStateGeneration = 0L;
+		telemetryBuffer.clear();
 		combatSignals.reset();
 		clientToolbar.removeNavigation(navButton);
 		navButton = null;
@@ -157,7 +170,9 @@ public class ClanWarBoardPlugin extends Plugin
 		else if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN
 			|| gameStateChanged.getGameState() == GameState.HOPPING)
 		{
+			bindIdentity("|");
 			combatSignals.reset();
+			refreshPanel();
 		}
 	}
 
@@ -182,13 +197,14 @@ public class ClanWarBoardPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
+		ClanAccess access = clanAccess();
+		bindIdentity(refreshContext(access));
 		rotateSessionIfNeeded();
 		int currentTick = client.getTickCount();
 		if (currentTick % 5 == 0)
 		{
 			refreshClanSnapshotIfChanged();
 		}
-		ClanAccess access = clanAccess();
 		if (telemetryBuffer.shouldHeartbeat(currentTick))
 		{
 			queueTelemetry("heartbeat", null, 0, access, "periodic_client_presence", "high", "none");
@@ -279,7 +295,9 @@ public class ClanWarBoardPlugin extends Plugin
 			return;
 		}
 		ClanAccess access = clanAccess();
-		boolean leaderView = resolveLeaderView(access, config.minimumLeaderRank(), session);
+		bindIdentity(refreshContext(access));
+		boolean leaderView = resolveLeaderView(access, config.minimumLeaderRank(),
+			canUseSession(session, sessionContext, sessionGeneration, activeContext, identityGeneration, "leader:write") ? session : null);
 		ClanWarBoardState currentState = boardState.withClanMembers(clanMemberCount());
 		SwingUtilities.invokeLater(() ->
 		{
@@ -299,34 +317,47 @@ public class ClanWarBoardPlugin extends Plugin
 		setPanelReloading(true);
 		ClanAccess registrationAccess = clanAccess();
 		String refreshContext = refreshContext(registrationAccess);
+		bindIdentity(refreshContext);
+		long refreshGeneration = identityGeneration;
 		ClanWarBoardState previousState = boardState;
+		String previousStateContext = boardStateContext;
+		long previousStateGeneration = boardStateGeneration;
 		int currentClanMemberCount = clanMemberCount();
 		String installationId = installationId();
 		executorService.submit(() ->
 		{
 			ClanWarBoardState completedState;
+			ClanWarBoardSession refreshedSession = null;
 			try
 			{
 				if (registrationAccess.getClanName() != null && !registrationAccess.getClanName().trim().isEmpty())
 				{
-					session = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking());
+					refreshedSession = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking());
 				}
-				completedState = apiClient.fetchBoardState(registrationAccess.getClanName(), currentClanMemberCount, session);
+				completedState = apiClient.fetchBoardState(registrationAccess.getClanName(), currentClanMemberCount, refreshedSession);
 			}
 			catch (IOException ex)
 			{
 				log.debug("Clan War Board API refresh failed", ex);
-				completedState = previousState.withOfflineStatus(ex.getMessage());
+				completedState = failureState(previousState, previousStateContext, previousStateGeneration,
+					refreshContext, refreshGeneration, ex.getMessage());
 			}
 			ClanWarBoardState refreshedState = completedState;
+			ClanWarBoardSession completedSession = refreshedSession;
 			clientThread.invoke(() ->
 			{
-				boolean contextCurrent = isRefreshContextCurrent(refreshContext, refreshContext(clanAccess()));
+				boolean contextCurrent = isIdentityCurrent(refreshContext, refreshGeneration,
+					refreshContext(clanAccess()), identityGeneration);
 				try
 				{
 					if (running && contextCurrent)
 					{
+						session = completedSession;
+						sessionContext = refreshContext;
+						sessionGeneration = refreshGeneration;
 						boardState = refreshedState;
+						boardStateContext = refreshContext;
+						boardStateGeneration = refreshGeneration;
 						if (loginMessagePending)
 						{
 							loginMessagePending = false;
@@ -353,9 +384,49 @@ public class ClanWarBoardPlugin extends Plugin
 		return access == null ? "|" : String.valueOf(access.getPlayerName()) + "|" + String.valueOf(access.getClanName());
 	}
 
+	private void bindIdentity(String context)
+	{
+		String normalized = context == null ? "|" : context;
+		if (normalized.equals(activeContext))
+		{
+			return;
+		}
+		activeContext = normalized;
+		identityGeneration++;
+		session = null;
+		sessionContext = "|";
+		sessionGeneration = 0L;
+		telemetryBuffer.clear();
+		combatSignals.reset();
+		boardState = ClanWarBoardState.offline("Waiting for this clan's service refresh");
+		boardStateContext = normalized;
+		boardStateGeneration = identityGeneration;
+	}
+
 	static boolean isRefreshContextCurrent(String expected, String current)
 	{
 		return expected != null && expected.equals(current);
+	}
+
+	static boolean isIdentityCurrent(String expectedContext, long expectedGeneration,
+		String currentContext, long currentGeneration)
+	{
+		return isRefreshContextCurrent(expectedContext, currentContext) && expectedGeneration == currentGeneration;
+	}
+
+	static ClanWarBoardState failureState(ClanWarBoardState previousState, String previousContext,
+		long previousGeneration, String refreshContext, long refreshGeneration, String message)
+	{
+		return previousState != null && isIdentityCurrent(previousContext, previousGeneration, refreshContext, refreshGeneration)
+			? previousState.withOfflineStatus(message)
+			: ClanWarBoardState.offline(message);
+	}
+
+	static boolean canUseSession(ClanWarBoardSession candidate, String candidateContext, long candidateGeneration,
+		String currentContext, long currentGeneration, String capability)
+	{
+		return candidate != null && isIdentityCurrent(candidateContext, candidateGeneration, currentContext, currentGeneration)
+			&& candidate.hasCapability(capability);
 	}
 
 	static boolean tryBeginAction(AtomicBoolean inFlight)
@@ -377,7 +448,10 @@ public class ClanWarBoardPlugin extends Plugin
 	private void rotateSessionIfNeeded()
 	{
 		ClanWarBoardSession current = session;
-		if (current == null || !current.shouldRotate(Instant.now()) || !sessionRefreshInFlight.compareAndSet(false, true))
+		String rotationContext = sessionContext;
+		long rotationGeneration = sessionGeneration;
+		if (current == null || !isIdentityCurrent(rotationContext, rotationGeneration, activeContext, identityGeneration)
+			|| !current.shouldRotate(Instant.now()) || !sessionRefreshInFlight.compareAndSet(false, true))
 		{
 			return;
 		}
@@ -385,7 +459,16 @@ public class ClanWarBoardPlugin extends Plugin
 		{
 			try
 			{
-				session = apiClient.rotateSession(current);
+				ClanWarBoardSession rotated = apiClient.rotateSession(current);
+				clientThread.invoke(() ->
+				{
+					if (running && session == current
+						&& isIdentityCurrent(rotationContext, rotationGeneration, activeContext, identityGeneration)
+						&& isIdentityCurrent(rotationContext, rotationGeneration, sessionContext, sessionGeneration))
+					{
+						session = rotated;
+					}
+				});
 			}
 			catch (IOException ex)
 			{
@@ -402,7 +485,9 @@ public class ClanWarBoardPlugin extends Plugin
 	private void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
 		ClanWarBoardSession current = session;
-		if (current == null || !current.hasCapability("leader:write"))
+		String actionContext = sessionContext;
+		long actionGeneration = sessionGeneration;
+		if (!isActionIdentityCurrent(current, actionContext, actionGeneration))
 		{
 			showActionMessage("Leader authorization is not available.", Color.RED);
 			return;
@@ -412,29 +497,38 @@ public class ClanWarBoardPlugin extends Plugin
 			showActionMessage("A fight update is already being sent.", Color.CYAN);
 			return;
 		}
-		executorService.submit(() ->
+		clientThread.invoke(() ->
 		{
-			try
-			{
-				apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(startsAt, duration, combatMin, combatMax, notes));
-				showActionMessage("War post published to the board.", Color.GREEN);
-				clientThread.invoke(this::refreshOnlineBoard);
-			}
-			catch (IOException ex)
-			{
-				showActionMessage("War post failed: " + ex.getMessage(), Color.RED);
-			}
-			finally
+			if (!isLiveActionIdentityCurrent(current, actionContext, actionGeneration))
 			{
 				matchActionInFlight.set(false);
+				return;
 			}
+			executorService.submit(() ->
+			{
+				try
+				{
+					apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(startsAt, duration, combatMin, combatMax, notes));
+					completeActionIfCurrent(current, actionContext, actionGeneration, "War post published to the board.", Color.GREEN, true);
+				}
+				catch (IOException ex)
+				{
+					completeActionIfCurrent(current, actionContext, actionGeneration, "War post failed: " + ex.getMessage(), Color.RED, false);
+				}
+				finally
+				{
+					matchActionInFlight.set(false);
+				}
+			});
 		});
 	}
 
 	private void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
 	{
 		ClanWarBoardSession current = session;
-		if (current == null || !current.hasCapability("leader:write"))
+		String actionContext = sessionContext;
+		long actionGeneration = sessionGeneration;
+		if (!isActionIdentityCurrent(current, actionContext, actionGeneration))
 		{
 			showActionMessage("Leader authorization is not available.", Color.RED);
 			return;
@@ -444,21 +538,59 @@ public class ClanWarBoardPlugin extends Plugin
 			showActionMessage("A fight update is already being sent.", Color.CYAN);
 			return;
 		}
-		executorService.submit(() ->
+		clientThread.invoke(() ->
 		{
-			try
-			{
-				apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
-				showActionMessage("Private challenge sent.", Color.GREEN);
-				clientThread.invoke(this::refreshOnlineBoard);
-			}
-			catch (IOException ex)
-			{
-				showActionMessage("Private challenge failed: " + ex.getMessage(), Color.RED);
-			}
-			finally
+			if (!isLiveActionIdentityCurrent(current, actionContext, actionGeneration))
 			{
 				matchActionInFlight.set(false);
+				return;
+			}
+			executorService.submit(() ->
+			{
+				try
+				{
+					apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
+					completeActionIfCurrent(current, actionContext, actionGeneration, "Private challenge sent.", Color.GREEN, true);
+				}
+				catch (IOException ex)
+				{
+					completeActionIfCurrent(current, actionContext, actionGeneration, "Private challenge failed: " + ex.getMessage(), Color.RED, false);
+				}
+				finally
+				{
+					matchActionInFlight.set(false);
+				}
+			});
+		});
+	}
+
+	private boolean isActionIdentityCurrent(ClanWarBoardSession candidate, String context, long generation)
+	{
+		return session == candidate && canUseSession(candidate, context, generation,
+			activeContext, identityGeneration, "leader:write");
+	}
+
+	private boolean isLiveActionIdentityCurrent(ClanWarBoardSession candidate, String context, long generation)
+	{
+		ClanAccess liveAccess = clanAccess();
+		bindIdentity(refreshContext(liveAccess));
+		return liveAccess.canManageWars(config.minimumLeaderRank())
+			&& isActionIdentityCurrent(candidate, context, generation);
+	}
+
+	private void completeActionIfCurrent(ClanWarBoardSession candidate, String context, long generation,
+		String message, Color color, boolean refresh)
+	{
+		clientThread.invoke(() ->
+		{
+			if (!running || !isLiveActionIdentityCurrent(candidate, context, generation))
+			{
+				return;
+			}
+			showActionMessage(message, color);
+			if (refresh)
+			{
+				refreshOnlineBoard();
 			}
 		});
 	}
@@ -518,12 +650,19 @@ public class ClanWarBoardPlugin extends Plugin
 	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access,
 		String evidence, String confidence, String relation)
 	{
+		ClanAccess liveAccess = clanAccess();
+		String liveContext = refreshContext(liveAccess);
+		bindIdentity(liveContext);
+		if (!isRefreshContextCurrent(refreshContext(access), liveContext))
+		{
+			return;
+		}
 		Player local = client.getLocalPlayer();
 		WorldPoint location = local == null ? null : local.getWorldLocation();
 		telemetryBuffer.add(new ClanWarBoardTelemetryEvent(
 			type,
-			access.getPlayerName(),
-			access.getClanName(),
+			liveAccess.getPlayerName(),
+			liveAccess.getClanName(),
 			opponentName,
 			amount,
 			client.getWorld(),
@@ -556,8 +695,11 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void flushTelemetry(long now)
 	{
+		bindIdentity(refreshContext(clanAccess()));
 		ClanWarBoardSession current = session;
-		if (current == null)
+		String telemetryContext = sessionContext;
+		long telemetryGeneration = sessionGeneration;
+		if (current == null || !isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration))
 		{
 			return;
 		}
@@ -568,14 +710,27 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 		executorService.submit(() ->
 		{
+			if (!isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
+				|| !isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
+			{
+				return;
+			}
 			try
 			{
 				apiClient.submitTelemetry(current, batch);
 			}
 			catch (IOException ex)
 			{
-				telemetryBuffer.requeue(batch);
-				log.debug("Clan War Board telemetry upload failed; batch requeued", ex);
+				if (isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
+					&& isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
+				{
+					telemetryBuffer.requeue(batch);
+					log.debug("Clan War Board telemetry upload failed; batch requeued", ex);
+				}
+				else
+				{
+					log.debug("Clan War Board telemetry upload failed after identity changed; batch discarded", ex);
+				}
 			}
 		});
 	}

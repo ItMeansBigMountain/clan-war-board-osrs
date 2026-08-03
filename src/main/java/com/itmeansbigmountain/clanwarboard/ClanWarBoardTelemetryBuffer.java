@@ -73,4 +73,11 @@ final class ClanWarBoardTelemetryBuffer
 	{
 		return pending.size();
 	}
+
+	synchronized void clear()
+	{
+		pending.clear();
+		lastFlushMillis = 0L;
+		lastHeartbeatTick = -HEARTBEAT_TICK_INTERVAL;
+	}
 }

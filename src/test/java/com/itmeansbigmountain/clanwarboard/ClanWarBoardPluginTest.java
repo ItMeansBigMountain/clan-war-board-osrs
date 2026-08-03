@@ -207,6 +207,40 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
+	public void failedRefreshNeverCarriesCachedPrivateStateAcrossIdentityChange()
+	{
+		WarBoardFight oldFight = new WarBoardFight("old", "trapistan", "rivals", "2026-08-04T20:00:00Z", 30, 70, 126, "private", "scheduled");
+		ClanWarBoardState oldState = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 2, 0), 11, 60,
+			Collections.emptyList(), Collections.singletonList(oldFight), Collections.emptyList(),
+			new PlayerWarMetrics(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11));
+		ClanWarBoardState sameIdentity = ClanWarBoardPlugin.failureState(oldState, "Oyama|TRAPISTAN", 4L, "Oyama|TRAPISTAN", 4L, "offline");
+		ClanWarBoardState changedIdentity = ClanWarBoardPlugin.failureState(oldState, "Oyama|TRAPISTAN", 4L, "Oyama|OTHER", 5L, "offline");
+		ClanWarBoardState abaIdentity = ClanWarBoardPlugin.failureState(oldState, "Oyama|TRAPISTAN", 4L, "Oyama|TRAPISTAN", 6L, "offline");
+		assertEquals(1, sameIdentity.getScheduled().size());
+		assertEquals(11, sameIdentity.getPlayerMetrics().getEventsTracked());
+		assertTrue(changedIdentity.getScheduled().isEmpty());
+		assertEquals(0, changedIdentity.getPlayerMetrics().getEventsTracked());
+		assertTrue(abaIdentity.getScheduled().isEmpty());
+		assertEquals(0, abaIdentity.getPlayerMetrics().getEventsTracked());
+	}
+
+	@Test
+	public void leaderSessionMustBeBoundToCurrentIdentityGeneration()
+	{
+		ClanWarBoardSession leader = new ClanWarBoardSession("secret", Instant.now().plusSeconds(3600), Collections.singleton("leader:write"));
+		assertTrue(ClanWarBoardPlugin.canUseSession(leader, "Oyama|TRAPISTAN", 4L, "Oyama|TRAPISTAN", 4L, "leader:write"));
+		assertFalse(ClanWarBoardPlugin.canUseSession(leader, "Oyama|TRAPISTAN", 4L, "Oyama|OTHER", 5L, "leader:write"));
+		assertFalse(ClanWarBoardPlugin.canUseSession(leader, "Oyama|TRAPISTAN", 4L, "Oyama|TRAPISTAN", 6L, "leader:write"));
+	}
+
+	@Test
+	public void asynchronousWorkRejectsAbaIdentityReuse()
+	{
+		assertTrue(ClanWarBoardPlugin.isIdentityCurrent("Oyama|TRAPISTAN", 4L, "Oyama|TRAPISTAN", 4L));
+		assertFalse(ClanWarBoardPlugin.isIdentityCurrent("Oyama|TRAPISTAN", 4L, "Oyama|TRAPISTAN", 6L));
+	}
+
+	@Test
 	public void duplicateMatchActionsAreRejectedUntilCompletion()
 	{
 		java.util.concurrent.atomic.AtomicBoolean inFlight = new java.util.concurrent.atomic.AtomicBoolean();
@@ -319,6 +353,9 @@ public class ClanWarBoardPluginTest
 		assertEquals(1, failed.size());
 		buffer.requeue(failed);
 		assertEquals(1, buffer.size());
+		buffer.clear();
+		assertEquals(0, buffer.size());
+		assertTrue(buffer.shouldHeartbeat(1));
 	}
 
 	@Test
