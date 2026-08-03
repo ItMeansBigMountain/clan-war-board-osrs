@@ -50,25 +50,27 @@ After the board refresh completes, the plugin displays a high-visibility colored
 - the number of fights needing an opponent; and
 - the next scheduled fight, when one exists.
 
-## Third-party networking and privacy
+## External API, authentication, and privacy
 
-Clan War Board communicates over HTTPS with an Azure service not controlled or verified by the RuneLite developers. Network requests necessarily expose the user's IP address to that service.
+The plugin talks only to the pinned HTTPS origin `https://salmon-dune-01c80c60f.7.azurestaticapps.net`; it is not user-configurable. Requests identify `ClanWarBoard-RuneLite/1.0` and `X-Clan-War-Board-Client: runelite`.
 
-Depending on the action and privacy setting, the plugin transmits:
+| Method and route | Purpose / authorization |
+| --- | --- |
+| `GET /api/health`, `GET /api/clans`, `GET /api/public/availability` | Public service health, registered-clan profiles, and board state. |
+| `POST /api/plugin/register` | Sends installation UUID, player/clan names, observed rank, plugin version, and public-stats preference; returns a one-hour bearer session and capabilities. |
+| `POST /api/plugin/session/rotate` | `member:read`; revokes/replaces the current session. |
+| `GET /api/plugin/me/metrics` | `member:read`; returns owner-only aggregates and recent confirmed-fight events. |
+| `POST /api/plugin/availability` | `leader:write`; sends availability terms. |
+| `POST /api/plugin/challenges` and `POST /api/plugin/challenges/{id}/actions` | `challenge:write`; sends proposed terms or accept/counter/reject/cancel actions. |
+| `POST /api/plugin/events/batch` | `telemetry:write`; sends up to 50 confirmed-fight observations. |
 
-- an opaque random installation UUID;
-- the logged-in RuneScape display name;
-- primary clan name and client-observed clan rank;
-- plugin version;
-- availability and challenge terms entered by an authorized leader;
-- accepted-fight world, tick, timestamp, region ID, world tile, and plane;
-- observed opponent/attacker display names for per-opponent event analysis;
-- event type, amount, relationship classification, attribution evidence, and confidence; and
-- the logged-in player's public display name only when public player tracking is enabled.
+Authenticated requests use an opaque bearer session plus a fresh timestamp and UUID nonce. Credentials are never shown in configuration or normal logs. Every member receives `member:read` and `telemetry:write`; leader capabilities are server-issued from the observed clan rank, and the plugin rechecks live identity/rank immediately before writes. The trust level is RuneLite client-observed rank, not proof signed by Jagex.
 
-Bearer session credentials are never displayed in configuration or written to normal logs. Exact accepted world, location, and rules are excluded from live public scheduled-fight responses. After the agreed fight window ends, the website publishes the completed fight's terms, cumulative clan/player/opponent analytics, location hotspots, evidence/confidence distributions, and individual event timeline. Players who disable public tracking appear under a stable anonymous label; observed opponent names remain attached to events for verbose analysis.
+Network requests expose the user's IP address to Azure. Depending on the action/privacy setting, payloads can include installation UUID, player/clan names, observed rank, plugin version, leader-entered terms, public-stats preference, and confirmed-fight event type/amount/world/tick/time/location/evidence/confidence/relation plus observed opponent/attacker names. Opted-out players are sent/stored under private identity handling and appear publicly under stable anonymous labels; owner-only aggregates use one-way installation/player hashes.
 
-Telemetry is persisted only when an event matches a confirmed fight's participating clan, world, and scheduled time window. Private aggregates are keyed by a one-way normalized player/clan hash and returned to an authenticated session for that player. Outgoing damage is exact local hitsplat evidence. An observed kill requires recent local damage to the same named player. A return is the first combat observation after the local player's death. Incoming damage amounts are exact, while attacker identity is included only when one nearby player is uniquely interacting with the local player; its evidence and confidence are stored. Non-own-clan actors are labeled `non_own_clan`, not asserted to be members of the agreed opposing clan. Failed batches are requeued and deterministic event IDs prevent retry double-counting.
+Telemetry is accepted only for the session clan, confirmed fight, matching world, and scheduled window. The plugin flushes every 10 seconds or 50 events, bounds the queue to 200, and requeues failed batches. Deterministic IDs prevent retry double-counting. Live public schedules omit exact accepted world/location/rules/notes; completed-fight pages publish terms and detailed aggregate/event analysis.
+
+Refresh failures retain an offline-marked immutable snapshot only for the same player, clan, and login generation. Identity changes clear sessions, private/cache state, and telemetry; malformed/non-success responses are treated as API failures.
 
 ## Build and test
 
