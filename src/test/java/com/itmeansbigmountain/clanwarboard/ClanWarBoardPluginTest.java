@@ -11,6 +11,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.awt.image.BufferedImage;
+import java.awt.Component;
+import java.awt.Container;
+import java.io.File;
+import javax.imageio.ImageIO;
 
 import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigGroup;
@@ -51,6 +56,12 @@ public class ClanWarBoardPluginTest
 		assertFalse(methodNames.contains("warWorld"));
 		assertFalse(methodNames.contains("hotspot"));
 		assertFalse(methodNames.contains("rules"));
+	}
+
+	@Test
+	public void boardRefreshCadenceIsBoundedAndReviewFriendly()
+	{
+		assertEquals(60L, ClanWarBoardPlugin.AUTO_REFRESH_SECONDS);
 	}
 
 	@Test
@@ -97,6 +108,44 @@ public class ClanWarBoardPluginTest
 		assertTrue(ClanWarBoardPanel.canOpenFight(scheduled, false));
 		assertTrue(ClanWarBoardPanel.canCreateFight(true));
 		assertFalse(ClanWarBoardPanel.canCreateFight(false));
+	}
+
+	@Test
+	public void osPartyInspiredPanelRendersRepresentativeBoardState() throws Exception
+	{
+		WarBoardFight open = new WarBoardFight("open", "rivals", null, "2026-08-04T20:00:00Z", 30, 70, 126, "Matched opts", "open");
+		WarBoardFight scheduled = new WarBoardFight("scheduled", "trapistan", "rivals", "2026-08-05T20:00:00Z", 30, 70, 126, "Matched opts", "scheduled");
+		WarBoardFight completed = new WarBoardFight("completed", "trapistan", "rivals", "2026-08-01T20:00:00Z", 30, 70, 126, "Complete", "completed");
+		ClanWarBoardState sample = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 2, 3), 11, 60,
+			Collections.singletonList(open), Collections.singletonList(scheduled), Collections.singletonList(completed));
+		ClanWarBoardPanel panel = new ClanWarBoardPanel(new ClanWarBoardPanel.MatchActionHandler()
+		{
+			@Override public void reloadAll() { }
+			@Override public void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes) { }
+			@Override public void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules) { }
+		});
+		panel.update("TRAPISTAN", "Oyama", "General", true, sample);
+		panel.setSize(ClanWarBoardPanel.PANEL_WIDTH, 700);
+		layoutTree(panel);
+		BufferedImage image = new BufferedImage(ClanWarBoardPanel.PANEL_WIDTH, 700, BufferedImage.TYPE_INT_ARGB);
+		panel.paint(image.getGraphics());
+		File screenshot = new File("build/reports/clan-war-board-panel.png");
+		screenshot.getParentFile().mkdirs();
+		ImageIO.write(image, "png", screenshot);
+		assertTrue(panel.getComponentCount() >= 2);
+		assertTrue(image.getRGB(10, 10) != 0);
+	}
+
+	private static void layoutTree(Container container)
+	{
+		container.doLayout();
+		for (Component child : container.getComponents())
+		{
+			if (child instanceof Container)
+			{
+				layoutTree((Container) child);
+			}
+		}
 	}
 
 	@Test

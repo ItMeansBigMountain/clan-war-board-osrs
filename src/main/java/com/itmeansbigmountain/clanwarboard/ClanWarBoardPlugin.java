@@ -9,6 +9,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
@@ -49,6 +51,7 @@ public class ClanWarBoardPlugin extends Plugin
 {
 	static final String PLUGIN_NAME = "Clan War Board";
 	static final String PLUGIN_VERSION = "1.0.0";
+	static final long AUTO_REFRESH_SECONDS = 60L;
 	private static final String INSTALL_ID_KEY = "installationId";
 
 	@Inject
@@ -74,6 +77,7 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
+	private ScheduledFuture<?> autoRefreshTask;
 	private final ClanWarBoardTelemetryBuffer telemetryBuffer = new ClanWarBoardTelemetryBuffer();
 	private final CombatSignalTracker combatSignals = new CombatSignalTracker();
 	private final AtomicBoolean sessionRefreshInFlight = new AtomicBoolean();
@@ -117,6 +121,9 @@ public class ClanWarBoardPlugin extends Plugin
 		clientToolbar.addNavigation(navButton);
 		refreshPanel();
 		refreshOnlineBoard();
+		autoRefreshTask = executorService.scheduleWithFixedDelay(
+			() -> clientThread.invoke(this::refreshOnlineBoard),
+			AUTO_REFRESH_SECONDS, AUTO_REFRESH_SECONDS, TimeUnit.SECONDS);
 		log.debug("{} started", PLUGIN_NAME);
 	}
 
@@ -124,6 +131,11 @@ public class ClanWarBoardPlugin extends Plugin
 	protected void shutDown()
 	{
 		running = false;
+		if (autoRefreshTask != null)
+		{
+			autoRefreshTask.cancel(false);
+			autoRefreshTask = null;
+		}
 		session = null;
 		combatSignals.reset();
 		clientToolbar.removeNavigation(navButton);

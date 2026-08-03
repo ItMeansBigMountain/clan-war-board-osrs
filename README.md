@@ -6,12 +6,15 @@ Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
 
 ## Panel workflow
 
-The side panel has three fixed navigation tabs and one global reload action:
+The side panel follows RuneLite's compact group-finder pattern: five fixed-width controls with tooltips, dense fight cards, count badges, explicit empty states, and a persistent connection footer:
 
-1. **Clan** — clan overview, installed-plugin coverage, fight counts, next war, and the authenticated player's persisted aggregate war metrics.
-2. **Board** — switch between **Needs opponent** and **Scheduled**. Members can read open posts but cannot open or accept them. Server-authorized leaders can open a post and continue to private scheduling.
-3. **Private** — server-authorized leaders can publish a public availability post or send exact private terms to another clan.
-4. **↻** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter. Existing startup, login, clan-change, and post-action refreshes remain active.
+1. **C — Clan** — clan overview, installed-plugin coverage, fight counts, next war, and the authenticated player's persisted aggregate war metrics.
+2. **B — Board** — switch between count-badged **Open** and **Scheduled** lists. Members can read open posts but cannot open or accept them. Server-authorized leaders can open a post and continue to private scheduling.
+3. **+ — Create** — server-authorized leaders can publish a public availability post or send exact private terms to another clan. The form separates common fight fields from private challenge terms.
+4. **H — History** — browse completed, service-verified fights and open their details without mixing them into the active board.
+5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter.
+
+The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time.
 
 Fight details use in-panel back navigation, so returning from a detail page keeps the user in the same tab and list filter.
 
@@ -84,12 +87,14 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 ## Manual verification
 
 1. Confirm the settings page contains no service URL, development role, or war form fields.
-2. Confirm the panel shows Clan, Board, Private, and ↻ controls at the top.
-3. Confirm Board shows Needs opponent and Scheduled filters.
+2. Confirm the panel shows C, B, +, H, and ↻ controls with descriptive tooltips.
+3. Confirm Board shows count-badged Open and Scheduled filters.
 4. Confirm a member cannot open an unopposed post.
 5. Confirm a server-authorized leader can open an unopposed post and proceed to private setup.
 6. Confirm Back returns to the same Board filter.
 7. Confirm the Clan tab shows installed/total members as `installed/roster`.
 8. Confirm login text is visible and reflects current board data.
 9. Confirm empty API collections remain truthful empty states.
-10. Confirm ↻ preserves the current page/filter, disables while loading, and refreshes the Clan metrics card.
+10. Confirm History shows only completed service fights and preserves its own back navigation.
+11. Confirm ↻ preserves the current page/filter, disables while loading, and refreshes the Clan metrics card.
+12. Confirm passive board refresh runs no more than once per 60 seconds and never overlaps another refresh.
