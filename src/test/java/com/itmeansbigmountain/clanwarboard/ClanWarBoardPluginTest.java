@@ -44,6 +44,7 @@ public class ClanWarBoardPluginTest
 
 		assertEquals("clanwarboard", group.value());
 		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
+		assertFalse(config.shareWarTelemetry());
 		assertFalse(config.publicPlayerTracking());
 		assertTrue(config.showLoginMessage());
 		Set<String> methodNames = java.util.Arrays.stream(ClanWarBoardConfig.class.getMethods())
@@ -294,6 +295,12 @@ public class ClanWarBoardPluginTest
 		assertEquals("token-123", session.getToken());
 		assertTrue(session.hasCapability("leader:write"));
 		assertFalse(session.hasCapability("admin"));
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void registrationResponseRejectsMissingCredentials()
+	{
+		ClanWarBoardApiClient.parseSession("{\"capabilities\":[\"member:read\"]}");
 	}
 
 	@Test

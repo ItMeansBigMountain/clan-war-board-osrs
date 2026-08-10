@@ -1,6 +1,6 @@
 # Clan War Board
 
-Clan War Board is a RuneLite external plugin for OSRS clans to publish, accept, schedule, and review consensual clan fights. It is an organization board—not an enemy tracker or scouting tool.
+Clan War Board is a RuneLite external plugin for OSRS clans to publish availability, send private challenge terms, and review consensual clan fights. It is an organization board—not an enemy tracker or scouting tool.
 
 Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
 
@@ -9,7 +9,7 @@ Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
 The side panel follows RuneLite's compact group-finder pattern: five fixed-width controls with tooltips, dense fight cards, count badges, explicit empty states, and a persistent connection footer:
 
 1. **C — Clan** — clan overview, installed-plugin coverage, fight counts, next war, and the authenticated player's persisted aggregate war metrics.
-2. **B — Board** — switch between count-badged **Open** and **Scheduled** lists. Members can read open posts but cannot open or accept them. Server-authorized leaders can open a post and continue to private scheduling.
+2. **B — Board** — switch between count-badged **Open** and **Scheduled** lists. Members see truthful read-only cards. Server-authorized leaders can open an availability post and use it to prefill a new private challenge draft.
 3. **+ — Create** — server-authorized leaders can publish a public availability post or send exact private terms to another clan. The form separates common fight fields from private challenge terms.
 4. **H — History** — browse completed, service-verified fights and open their details without mixing them into the active board.
 5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter.
@@ -38,6 +38,7 @@ Client-side button visibility is not backend authorization. RuneLite-observed ra
 RuneLite settings intentionally contain only:
 
 - `Leader Rank Needed`
+- `Share War Telemetry` — optional and disabled by default. When disabled, no combat/location heartbeat or fight telemetry is queued or uploaded.
 - `Show My Player Stats Publicly`
 - `Show Login Message`
 
@@ -61,14 +62,14 @@ The plugin talks only to the pinned HTTPS origin `https://salmon-dune-01c80c60f.
 | `POST /api/plugin/session/rotate` | `member:read`; revokes/replaces the current session. |
 | `GET /api/plugin/me/metrics` | `member:read`; returns owner-only aggregates and recent confirmed-fight events. |
 | `POST /api/plugin/availability` | `leader:write`; sends availability terms. |
-| `POST /api/plugin/challenges` and `POST /api/plugin/challenges/{id}/actions` | `challenge:write`; sends proposed terms or accept/counter/reject/cancel actions. |
+| `POST /api/plugin/challenges` | `challenge:write`; sends exact proposed terms to another clan. |
 | `POST /api/plugin/events/batch` | `telemetry:write`; sends up to 50 confirmed-fight observations. |
 
-Authenticated requests use an opaque bearer session plus a fresh timestamp and UUID nonce. Credentials are never shown in configuration or normal logs. Every member receives `member:read` and `telemetry:write`; leader capabilities are server-issued from the observed clan rank, and the plugin rechecks live identity/rank immediately before writes. The trust level is RuneLite client-observed rank, not proof signed by Jagex.
+Authenticated requests use an opaque bearer session plus a fresh timestamp and UUID nonce. Credentials are never shown in configuration or normal logs. Every member receives `member:read` and may receive `telemetry:write`; the plugin uses telemetry capability only when the separate default-off `Share War Telemetry` setting is enabled. Leader capabilities are server-issued from the observed clan rank, and the plugin rechecks live identity/rank immediately before writes. The trust level is RuneLite client-observed rank, not proof signed by Jagex.
 
-Network requests expose the user's IP address to Azure. Depending on the action/privacy setting, payloads can include installation UUID, player/clan names, observed rank, plugin version, leader-entered terms, public-stats preference, and confirmed-fight event type/amount/world/tick/time/location/evidence/confidence/relation plus observed opponent/attacker names. Opted-out players are sent/stored under private identity handling and appear publicly under stable anonymous labels; owner-only aggregates use one-way installation/player hashes.
+Core board registration is required while logged into a clan and exposes the user's IP address to Azure. Registration sends installation UUID, player/clan names, observed rank, plugin version, and public-stats preference so the service can authorize the clan board. Leader actions send leader-entered fight terms. Optional confirmed-fight event type/amount/world/tick/time/location/evidence/confidence/relation and observed opponent/attacker names are sent only when `Share War Telemetry` is enabled. Turning it off clears buffered events and prevents new telemetry enqueue or upload. When telemetry is enabled but public player stats are disabled, events use private identity handling and appear publicly under stable anonymous labels; owner-only aggregates use one-way installation/player hashes.
 
-Telemetry is accepted only for the session clan, confirmed fight, matching world, and scheduled window. The plugin flushes every 10 seconds or 50 events, bounds the queue to 200, and requeues failed batches. Deterministic IDs prevent retry double-counting. Live public schedules omit exact accepted world/location/rules/notes; completed-fight pages publish terms and detailed aggregate/event analysis.
+When explicitly enabled, telemetry is accepted only for the session clan, confirmed fight, matching world, and scheduled window. The plugin flushes every 10 seconds or 50 events, bounds the queue to 200, and requeues failed batches only while consent remains enabled. Deterministic IDs prevent retry double-counting. Live public schedules omit exact accepted world/location/rules/notes; completed-fight pages publish terms and detailed aggregate/event analysis.
 
 Refresh failures retain an offline-marked immutable snapshot only for the same player, clan, and login generation. Identity changes clear sessions, private/cache state, and telemetry; malformed/non-success responses are treated as API failures.
 
@@ -90,11 +91,11 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 
 ## Manual verification
 
-1. Confirm the settings page contains no service URL, development role, or war form fields.
+1. Confirm the settings page contains no service URL, development role, or war form fields; `Share War Telemetry` is off by default.
 2. Confirm the panel shows C, B, +, H, and ↻ controls with descriptive tooltips.
 3. Confirm Board shows count-badged Open and Scheduled filters.
 4. Confirm a member cannot open an unopposed post.
-5. Confirm a server-authorized leader can open an unopposed post and proceed to private setup.
+5. Confirm a server-authorized leader can open an unopposed post and prefill a private challenge draft for that clan.
 6. Confirm Back returns to the same Board filter.
 7. Confirm the Clan tab shows installed/total members as `installed/roster`.
 8. Confirm login text is visible and reflects current board data.
@@ -108,3 +109,4 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 16. Confirm repeated submission clicks cannot create duplicate in-flight fight requests.
 17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls, player metrics, scheduled/private state, and queued telemetry before the new identity refresh completes.
 18. Confirm a failed refresh after changing identity cannot restore the previous identity's cached board or session.
+19. Confirm disabled telemetry produces no heartbeat, combat event, queue growth, batch request, or retry; turning it off clears an existing buffer immediately.

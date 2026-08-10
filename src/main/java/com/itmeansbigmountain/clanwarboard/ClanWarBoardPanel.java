@@ -351,16 +351,16 @@ class ClanWarBoardPanel extends PluginPanel
 		addCard(clean(selectedFight.getClanId(), "Fight"), fightLines(selectedFight), selectedFight.needsOpponent() ? ACCENT : SUCCESS);
 		if (selectedFight.needsOpponent() && leader)
 		{
-			JButton accept = new JButton("Accept & schedule privately");
-			accept.setAlignmentX(Component.LEFT_ALIGNMENT);
-			accept.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
-			accept.addActionListener(event -> {
+			JButton challenge = new JButton("Draft private challenge");
+			challenge.setAlignmentX(Component.LEFT_ALIGNMENT);
+			challenge.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
+			challenge.addActionListener(event -> {
 				privateOpponent = clean(selectedFight.getClanId(), "");
 				tab = Tab.PRIVATE;
 				selectedFight = null;
 				render();
 			});
-			content.add(accept);
+			content.add(challenge);
 		}
 	}
 
@@ -370,7 +370,7 @@ class ClanWarBoardPanel extends PluginPanel
 		if (!leader)
 		{
 			addCard("Private match setup", new String[] {
-				"Only a server-authorized clan administrator can create or accept match terms.",
+				"Only a server-authorized clan administrator can create posts or send match terms.",
 				"Members can view scheduled fights from the War Board tab."
 			}, MUTED);
 			return;

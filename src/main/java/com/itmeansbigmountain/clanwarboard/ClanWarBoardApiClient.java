@@ -8,7 +8,6 @@ import javax.inject.Inject;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -16,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -41,31 +39,47 @@ final class ClanWarBoardApiClient
 
 	ClanWarBoardState fetchBoardState(String clanName, int clanMemberCount, ClanWarBoardSession session) throws IOException
 	{
-		String health = get("/api/health");
-		if (!health.contains("\"ok\": true") && !health.contains("\"ok\":true"))
+		try
 		{
-			throw new IOException("Clan War Board health check did not return ok");
-		}
-		String clans = get("/api/clans");
-		String availability = get("/api/public/availability");
-		JsonArray clanRows = gson.fromJson(clans, JsonObject.class).getAsJsonArray("clans");
-		int installedMembers = 0;
-		String normalizedClan = normalizeClanId(clanName);
-		for (JsonElement element : clanRows)
-		{
-			JsonObject row = element.getAsJsonObject();
-			if (normalizedClan.equals(string(row, "clan_id")))
+			JsonObject health = gson.fromJson(get("/api/health"), JsonObject.class);
+			if (health == null || !health.has("ok") || !health.get("ok").getAsBoolean())
 			{
-				installedMembers = integer(row, "member_count");
+				throw new IOException("Clan War Board health check did not return ok");
 			}
+			String clans = get("/api/clans");
+			String availability = get("/api/public/availability");
+			JsonObject clanRoot = gson.fromJson(clans, JsonObject.class);
+			if (clanRoot == null || !clanRoot.has("clans") || !clanRoot.get("clans").isJsonArray())
+			{
+				throw new IOException("Clan War Board clans response is malformed");
+			}
+			JsonArray clanRows = clanRoot.getAsJsonArray("clans");
+			int installedMembers = 0;
+			String normalizedClan = normalizeClanId(clanName);
+			for (JsonElement element : clanRows)
+			{
+				JsonObject row = element.getAsJsonObject();
+				if (normalizedClan.equals(string(row, "clan_id")))
+				{
+					installedMembers = integer(row, "member_count");
+				}
+			}
+			List<WarBoardFight> open = parseFights(availability, "availability");
+			List<WarBoardFight> scheduled = parseFights(availability, "scheduled");
+			List<WarBoardFight> history = parseFights(availability, "history");
+			PlayerWarMetrics metrics = session == null ? PlayerWarMetrics.empty()
+				: parsePlayerMetrics(get("/api/plugin/me/metrics", authenticatedHeaders(session.getToken())));
+			ClanWarBoardApiStatus status = ClanWarBoardApiStatus.online("Connected to Clan War Board", clanRows.size(), open.size());
+			return new ClanWarBoardState(status, installedMembers, clanMemberCount, open, scheduled, history, metrics);
 		}
-		List<WarBoardFight> open = parseFights(availability, "availability");
-		List<WarBoardFight> scheduled = parseFights(availability, "scheduled");
-		List<WarBoardFight> history = parseFights(availability, "history");
-		PlayerWarMetrics metrics = session == null ? PlayerWarMetrics.empty()
-			: parsePlayerMetrics(get("/api/plugin/me/metrics", authenticatedHeaders(session.getToken())));
-		ClanWarBoardApiStatus status = ClanWarBoardApiStatus.online("Connected to Clan War Board", clanRows.size(), open.size());
-		return new ClanWarBoardState(status, installedMembers, clanMemberCount, open, scheduled, history, metrics);
+		catch (IOException ex)
+		{
+			throw ex;
+		}
+		catch (RuntimeException ex)
+		{
+			throw new IOException("Clan War Board returned malformed JSON", ex);
+		}
 	}
 
 	private PlayerWarMetrics parsePlayerMetrics(String json)
@@ -85,12 +99,12 @@ final class ClanWarBoardApiClient
 		{
 			throw new IOException("Clan membership is required before registration");
 		}
-		return parseSession(post("/api/plugin/register", registrationJson(installId, access, pluginVersion, publicStats), Collections.emptyMap()));
+		return parseSessionResponse(post("/api/plugin/register", registrationJson(installId, access, pluginVersion, publicStats), Collections.emptyMap()));
 	}
 
 	ClanWarBoardSession rotateSession(ClanWarBoardSession session) throws IOException
 	{
-		return parseSession(post("/api/plugin/session/rotate", "{}", authenticatedHeaders(session.getToken())));
+		return parseSessionResponse(post("/api/plugin/session/rotate", "{}", authenticatedHeaders(session.getToken())));
 	}
 
 	String postAvailability(ClanWarBoardSession session, String json) throws IOException
@@ -103,10 +117,6 @@ final class ClanWarBoardApiClient
 		return post("/api/plugin/challenges", json, authenticatedHeaders(session.getToken()));
 	}
 
-	String updateChallenge(ClanWarBoardSession session, String challengeId, String json) throws IOException
-	{
-		return post("/api/plugin/challenges/" + challengeId + "/actions", json, authenticatedHeaders(session.getToken()));
-	}
 
 	void submitTelemetry(ClanWarBoardSession session, List<ClanWarBoardTelemetryEvent> events) throws IOException
 	{
@@ -147,7 +157,11 @@ final class ClanWarBoardApiClient
 	private List<WarBoardFight> parseFights(String json, String collection)
 	{
 		JsonObject root = gson.fromJson(json, JsonObject.class);
-		JsonArray rows = root == null || !root.has(collection) ? new JsonArray() : root.getAsJsonArray(collection);
+		if (root == null || !root.has(collection) || !root.get(collection).isJsonArray())
+		{
+			throw new IllegalArgumentException("Fight response is missing " + collection);
+		}
+		JsonArray rows = root.getAsJsonArray(collection);
 		List<WarBoardFight> fights = new ArrayList<>();
 		for (JsonElement element : rows)
 		{
@@ -214,14 +228,40 @@ final class ClanWarBoardApiClient
 
 	static ClanWarBoardSession parseSession(String json)
 	{
-		String token = jsonString(json, "sessionToken");
-		String expiresAt = jsonString(json, "expiresAt");
-		String rawCapabilities = jsonArray(json, "capabilities");
-		Set<String> capabilities = rawCapabilities.isEmpty() ? Collections.emptySet() : Arrays.stream(rawCapabilities.split(","))
-			.map(value -> value.trim().replace("\"", ""))
-			.filter(value -> !value.isEmpty())
-			.collect(Collectors.toSet());
-		return new ClanWarBoardSession(token, expiresAt.isEmpty() ? null : OffsetDateTime.parse(expiresAt).toInstant(), capabilities);
+		JsonObject root = new Gson().fromJson(json, JsonObject.class);
+		if (root == null || !root.has("sessionToken") || !root.has("expiresAt")
+			|| !root.has("capabilities") || !root.get("capabilities").isJsonArray())
+		{
+			throw new IllegalArgumentException("Session response is missing required fields");
+		}
+		String token = root.get("sessionToken").getAsString();
+		String expiresAt = root.get("expiresAt").getAsString();
+		if (token.trim().isEmpty() || expiresAt.trim().isEmpty())
+		{
+			throw new IllegalArgumentException("Session token and expiry are required");
+		}
+		Set<String> capabilities = new java.util.HashSet<>();
+		for (JsonElement capability : root.getAsJsonArray("capabilities"))
+		{
+			String value = capability.getAsString().trim();
+			if (!value.isEmpty())
+			{
+				capabilities.add(value);
+			}
+		}
+		return new ClanWarBoardSession(token, OffsetDateTime.parse(expiresAt).toInstant(), capabilities);
+	}
+
+	private static ClanWarBoardSession parseSessionResponse(String json) throws IOException
+	{
+		try
+		{
+			return parseSession(json);
+		}
+		catch (RuntimeException ex)
+		{
+			throw new IOException("Clan War Board returned a malformed session", ex);
+		}
 	}
 
 	private String get(String path) throws IOException
@@ -264,31 +304,6 @@ final class ClanWarBoardApiClient
 		}
 	}
 
-	private static String jsonString(String json, String key)
-	{
-		String marker = "\"" + key + "\":\"";
-		int start = json == null ? -1 : json.indexOf(marker);
-		if (start < 0)
-		{
-			return "";
-		}
-		start += marker.length();
-		int end = json.indexOf('"', start);
-		return end < 0 ? "" : json.substring(start, end);
-	}
-
-	private static String jsonArray(String json, String key)
-	{
-		String marker = "\"" + key + "\":[";
-		int start = json == null ? -1 : json.indexOf(marker);
-		if (start < 0)
-		{
-			return "";
-		}
-		start += marker.length();
-		int end = json.indexOf(']', start);
-		return end < 0 ? "" : json.substring(start, end);
-	}
 
 	private static String jsonEscape(String value)
 	{

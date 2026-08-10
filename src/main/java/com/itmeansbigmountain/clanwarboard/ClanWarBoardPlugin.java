@@ -89,6 +89,7 @@ public class ClanWarBoardPlugin extends Plugin
 	private volatile String activeContext = "|";
 	private volatile long identityGeneration;
 	private volatile boolean running;
+	private volatile boolean telemetrySharingEnabled;
 	private volatile ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
 	private volatile String boardStateContext = "|";
 	private volatile long boardStateGeneration;
@@ -99,6 +100,7 @@ public class ClanWarBoardPlugin extends Plugin
 	protected void startUp()
 	{
 		running = true;
+		telemetrySharingEnabled = config.shareWarTelemetry();
 		panel = new ClanWarBoardPanel(new ClanWarBoardPanel.MatchActionHandler()
 		{
 			@Override
@@ -138,6 +140,7 @@ public class ClanWarBoardPlugin extends Plugin
 	protected void shutDown()
 	{
 		running = false;
+		telemetrySharingEnabled = false;
 		if (autoRefreshTask != null)
 		{
 			autoRefreshTask.cancel(false);
@@ -181,7 +184,17 @@ public class ClanWarBoardPlugin extends Plugin
 	{
 		if (ClanWarBoardConfig.CONFIG_GROUP.equals(event.getGroup()))
 		{
+			telemetrySharingEnabled = config.shareWarTelemetry();
+			if (!telemetrySharingEnabled)
+			{
+				telemetryBuffer.clear();
+				combatSignals.reset();
+			}
 			refreshPanel();
+			if ("publicPlayerTracking".equals(event.getKey()))
+			{
+				refreshOnlineBoard();
+			}
 		}
 	}
 
@@ -205,7 +218,7 @@ public class ClanWarBoardPlugin extends Plugin
 		{
 			refreshClanSnapshotIfChanged();
 		}
-		if (telemetryBuffer.shouldHeartbeat(currentTick))
+		if (telemetrySharingEnabled && telemetryBuffer.shouldHeartbeat(currentTick))
 		{
 			queueTelemetry("heartbeat", null, 0, access, "periodic_client_presence", "high", "none");
 		}
@@ -215,7 +228,7 @@ public class ClanWarBoardPlugin extends Plugin
 	@Subscribe
 	public void onHitsplatApplied(HitsplatApplied event)
 	{
-		if (!(event.getActor() instanceof Player) || event.getHitsplat() == null)
+		if (!telemetrySharingEnabled || !(event.getActor() instanceof Player) || event.getHitsplat() == null)
 		{
 			return;
 		}
@@ -253,7 +266,7 @@ public class ClanWarBoardPlugin extends Plugin
 	@Subscribe
 	public void onActorDeath(ActorDeath event)
 	{
-		if (!(event.getActor() instanceof Player))
+		if (!telemetrySharingEnabled || !(event.getActor() instanceof Player))
 		{
 			return;
 		}
@@ -650,6 +663,10 @@ public class ClanWarBoardPlugin extends Plugin
 	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access,
 		String evidence, String confidence, String relation)
 	{
+		if (!telemetrySharingEnabled)
+		{
+			return;
+		}
 		ClanAccess liveAccess = clanAccess();
 		String liveContext = refreshContext(liveAccess);
 		bindIdentity(liveContext);
@@ -681,6 +698,11 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void flushTelemetryIfReady()
 	{
+		if (!telemetrySharingEnabled)
+		{
+			telemetryBuffer.clear();
+			return;
+		}
 		long now = System.currentTimeMillis();
 		if (telemetryBuffer.shouldFlush(now))
 		{
@@ -695,6 +717,11 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void flushTelemetry(long now)
 	{
+		if (!telemetrySharingEnabled)
+		{
+			telemetryBuffer.clear();
+			return;
+		}
 		bindIdentity(refreshContext(clanAccess()));
 		ClanWarBoardSession current = session;
 		String telemetryContext = sessionContext;
@@ -710,7 +737,8 @@ public class ClanWarBoardPlugin extends Plugin
 		}
 		executorService.submit(() ->
 		{
-			if (!isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
+			if (!telemetrySharingEnabled
+				|| !isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
 				|| !isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
 			{
 				return;
@@ -721,7 +749,8 @@ public class ClanWarBoardPlugin extends Plugin
 			}
 			catch (IOException ex)
 			{
-				if (isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
+				if (telemetrySharingEnabled
+					&& isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
 					&& isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
 				{
 					telemetryBuffer.requeue(batch);
