@@ -44,8 +44,8 @@ import net.runelite.client.util.ColorUtil;
 @Slf4j
 @PluginDescriptor(
 	name = ClanWarBoardPlugin.PLUGIN_NAME,
-	description = "Lets clan leaders set up wilderness fights while members see the current war board.",
-	tags = {"clan", "war", "pvp", "wilderness"}
+	description = "Sets up CWA and Wilderness clan fights with rankings and post-fight analysis.",
+	tags = {"clan", "war", "pvp", "cwa", "wilderness"}
 )
 public class ClanWarBoardPlugin extends Plugin
 {
@@ -119,6 +119,18 @@ public class ClanWarBoardPlugin extends Plugin
 			public void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
 			{
 				ClanWarBoardPlugin.this.submitChallenge(opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+			}
+
+			@Override
+			public void submitAvailability(FightMode mode, String startsAt, String duration, String combatMin, String combatMax, String notes)
+			{
+				ClanWarBoardPlugin.this.submitAvailability(mode, startsAt, duration, combatMin, combatMax, notes);
+			}
+
+			@Override
+			public void submitChallenge(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+			{
+				ClanWarBoardPlugin.this.submitChallenge(mode, opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
 			}
 		});
 		navButton = NavigationButton.builder()
@@ -497,46 +509,10 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
-		ClanWarBoardSession current = session;
-		String actionContext = sessionContext;
-		long actionGeneration = sessionGeneration;
-		if (!isActionIdentityCurrent(current, actionContext, actionGeneration))
-		{
-			showActionMessage("Leader authorization is not available.", Color.RED);
-			return;
-		}
-		if (!tryBeginAction(matchActionInFlight))
-		{
-			showActionMessage("A fight update is already being sent.", Color.CYAN);
-			return;
-		}
-		clientThread.invoke(() ->
-		{
-			if (!isLiveActionIdentityCurrent(current, actionContext, actionGeneration))
-			{
-				matchActionInFlight.set(false);
-				return;
-			}
-			executorService.submit(() ->
-			{
-				try
-				{
-					apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(startsAt, duration, combatMin, combatMax, notes));
-					completeActionIfCurrent(current, actionContext, actionGeneration, "War post published to the board.", Color.GREEN, true);
-				}
-				catch (IOException ex)
-				{
-					completeActionIfCurrent(current, actionContext, actionGeneration, "War post failed: " + ex.getMessage(), Color.RED, false);
-				}
-				finally
-				{
-					matchActionInFlight.set(false);
-				}
-			});
-		});
+		submitAvailability(FightMode.CWA, startsAt, duration, combatMin, combatMax, notes);
 	}
 
-	private void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	private void submitAvailability(FightMode mode, String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
 		ClanWarBoardSession current = session;
 		String actionContext = sessionContext;
@@ -562,7 +538,53 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				try
 				{
-					apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
+					apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(mode, startsAt, duration, combatMin, combatMax, notes));
+					completeActionIfCurrent(current, actionContext, actionGeneration, "War post published to the board.", Color.GREEN, true);
+				}
+				catch (IOException ex)
+				{
+					completeActionIfCurrent(current, actionContext, actionGeneration, "War post failed: " + ex.getMessage(), Color.RED, false);
+				}
+				finally
+				{
+					matchActionInFlight.set(false);
+				}
+			});
+		});
+	}
+
+	private void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	{
+		submitChallenge(FightMode.CWA, opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+	}
+
+	private void submitChallenge(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	{
+		ClanWarBoardSession current = session;
+		String actionContext = sessionContext;
+		long actionGeneration = sessionGeneration;
+		if (!isActionIdentityCurrent(current, actionContext, actionGeneration))
+		{
+			showActionMessage("Leader authorization is not available.", Color.RED);
+			return;
+		}
+		if (!tryBeginAction(matchActionInFlight))
+		{
+			showActionMessage("A fight update is already being sent.", Color.CYAN);
+			return;
+		}
+		clientThread.invoke(() ->
+		{
+			if (!isLiveActionIdentityCurrent(current, actionContext, actionGeneration))
+			{
+				matchActionInFlight.set(false);
+				return;
+			}
+			executorService.submit(() ->
+			{
+				try
+				{
+					apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(mode, opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
 					completeActionIfCurrent(current, actionContext, actionGeneration, "Private challenge sent.", Color.GREEN, true);
 				}
 				catch (IOException ex)

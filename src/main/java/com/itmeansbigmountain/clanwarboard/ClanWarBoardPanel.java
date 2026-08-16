@@ -27,6 +27,14 @@ class ClanWarBoardPanel extends PluginPanel
 		void reloadAll();
 		void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes);
 		void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules);
+		default void submitAvailability(FightMode mode, String startsAt, String duration, String combatMin, String combatMax, String notes)
+		{
+			submitAvailability(startsAt, duration, combatMin, combatMax, notes);
+		}
+		default void submitChallenge(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+		{
+			submitChallenge(opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+		}
 	}
 
 	private enum Tab { OVERVIEW, BOARD, PRIVATE, HISTORY }
@@ -54,6 +62,7 @@ class ClanWarBoardPanel extends PluginPanel
 	private WarBoardFight selectedFight;
 	private String privateOpponent = "";
 	private boolean reloading;
+	private FightMode mode = FightMode.CWA;
 
 	ClanWarBoardPanel(MatchActionHandler actionHandler)
 	{
@@ -116,7 +125,8 @@ class ClanWarBoardPanel extends PluginPanel
 	private void render()
 	{
 		content.removeAll();
-		addTitle(selectedFight == null ? "Clan War Board" : "Fight Details");
+		addModeSwitcher();
+		addTitle(selectedFight == null ? mode.getLabel() + " Board" : mode.getShortLabel() + " Fight Details");
 		if (selectedFight != null)
 		{
 			renderFightDetails();
@@ -134,6 +144,24 @@ class ClanWarBoardPanel extends PluginPanel
 		}
 		content.revalidate();
 		content.repaint();
+	}
+
+	private void addModeSwitcher()
+	{
+		JButton switcher = new JButton(mode == FightMode.CWA ? "CWA  |  Wildy" : "Wildy  |  CWA");
+		switcher.setToolTipText("Switch CWA and Wilderness fights, rankings and history");
+		switcher.setAlignmentX(Component.LEFT_ALIGNMENT);
+		switcher.setMaximumSize(new Dimension(CONTENT_WIDTH, 30));
+		switcher.setForeground(Color.WHITE);
+		switcher.setBackground(mode == FightMode.CWA ? new Color(126, 67, 54) : new Color(55, 91, 57));
+		switcher.addActionListener(event -> { mode = mode.other(); selectedFight = null; render(); });
+		content.add(switcher);
+		content.add(Box.createVerticalStrut(6));
+	}
+
+	FightMode getMode()
+	{
+		return mode;
 	}
 
 	private void addNavigation()
@@ -209,11 +237,11 @@ class ClanWarBoardPanel extends PluginPanel
 			leader ? "Leader tools: enabled" : "War posts: read-only"
 		}, leader ? ACCENT : MUTED);
 		PlayerWarMetrics metrics = state.getPlayerMetrics();
-		addCard("My war statistics", new String[] {
+		addCard("My " + mode.getShortLabel() + " statistics", new String[] {
 			"Fights observed: " + metrics.getFightsObserved(),
 			"Observed kills: " + metrics.getObservedKills(),
 			"Deaths: " + metrics.getDeaths(),
-			"Returns: " + metrics.getReturns(),
+			mode.isReturnsAllowed() ? "Returns: " + metrics.getReturns() : "Returns: disabled in CWA",
 			"Opponent damage: " + metrics.getOpponentDamage(),
 			"Friendly-fire damage: " + metrics.getFriendlyFireDamage(),
 			"Total damage inflicted: " + metrics.getDamageInflicted(),
@@ -222,7 +250,7 @@ class ClanWarBoardPanel extends PluginPanel
 			"Activity samples: " + metrics.getActivitySamples(),
 			"Tracked war events: " + metrics.getEventsTracked()
 		}, ACCENT);
-		addCard("Fight record", new String[] {
+		addCard(mode.getShortLabel() + " fight record", new String[] {
 			"Previous fights: " + state.getHistory().size(),
 			"Scheduled fights: " + state.getScheduled().size(),
 			openFightCountLabel(state.getAvailableCount())
@@ -263,11 +291,11 @@ class ClanWarBoardPanel extends PluginPanel
 		filters.setOpaque(false);
 		filters.setAlignmentX(Component.LEFT_ALIGNMENT);
 		filters.setMaximumSize(new Dimension(CONTENT_WIDTH, 32));
-		filters.add(filterButton("Open (" + state.getAvailable().size() + ")", BoardFilter.OPEN));
-		filters.add(filterButton("Scheduled (" + state.getScheduled().size() + ")", BoardFilter.SCHEDULED));
+		filters.add(filterButton("Open (" + modeFights(state.getAvailable()).size() + ")", BoardFilter.OPEN));
+		filters.add(filterButton("Scheduled (" + modeFights(state.getScheduled()).size() + ")", BoardFilter.SCHEDULED));
 		content.add(filters);
 		content.add(Box.createVerticalStrut(8));
-		List<WarBoardFight> fights = filter == BoardFilter.OPEN ? state.getAvailable() : state.getScheduled();
+		List<WarBoardFight> fights = modeFights(filter == BoardFilter.OPEN ? state.getAvailable() : state.getScheduled());
 		if (fights.isEmpty())
 		{
 			addCard(filter == BoardFilter.OPEN ? "No open war posts" : "No scheduled fights",
@@ -289,8 +317,9 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void renderHistory()
 	{
-		addSectionHeader("Fight history", state.getHistory().size() + " completed");
-		if (state.getHistory().isEmpty())
+		List<WarBoardFight> history = modeFights(state.getHistory());
+		addSectionHeader(mode.getShortLabel() + " history", history.size() + " completed");
+		if (history.isEmpty())
 		{
 			addCard("No completed fights", new String[] {
 				"Completed, service-verified clan fights will appear here.",
@@ -298,10 +327,23 @@ class ClanWarBoardPanel extends PluginPanel
 			}, MUTED);
 			return;
 		}
-		for (WarBoardFight fight : state.getHistory())
+		for (WarBoardFight fight : history)
 		{
 			addFightButton(fight);
 		}
+	}
+
+	private List<WarBoardFight> modeFights(List<WarBoardFight> fights)
+	{
+		java.util.ArrayList<WarBoardFight> result = new java.util.ArrayList<>();
+		for (WarBoardFight fight : fights)
+		{
+			if (fight.getMode() == mode)
+			{
+				result.add(fight);
+			}
+		}
+		return result;
 	}
 
 	private void addSectionHeader(String title, String detail)
@@ -366,7 +408,7 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void renderPrivateSetup()
 	{
-		addSectionHeader("Create a fight", leader ? "Leader tools" : "Read only");
+		addSectionHeader("Create " + mode.getShortLabel() + " fight", leader ? "Leader tools" : "Read only");
 		if (!leader)
 		{
 			addCard("Private match setup", new String[] {
@@ -376,8 +418,8 @@ class ClanWarBoardPanel extends PluginPanel
 			return;
 		}
 		addCard("How it works", new String[] {
-			"Leave opponent blank to publish an open war post.",
-			"Enter an opponent clan to send exact private terms."
+			"Leave opponent blank to publish an open " + mode.getShortLabel() + " post.",
+			mode == FightMode.CWA ? "No returns: damage, tanking, binds and pile work matter." : "Returns and location control count in Wildy."
 		}, ACCENT);
 		JLabel formError = wrapped("", 11, new Color(235, 135, 115));
 		formError.setVisible(false);
@@ -388,7 +430,7 @@ class ClanWarBoardPanel extends PluginPanel
 		JTextField combatMin = field("70");
 		JTextField combatMax = field("126");
 		JTextField world = field("");
-		JTextField location = field("");
+		JTextField location = field(mode == FightMode.CWA ? "Clan Wars Arena" : "");
 		JTextField rules = field("");
 		content.add(label("Basics", 13, Font.BOLD, TEXT));
 		content.add(Box.createVerticalStrut(5));
@@ -425,11 +467,11 @@ class ClanWarBoardPanel extends PluginPanel
 			formError.setVisible(false);
 			if (opponent.getText().trim().isEmpty())
 			{
-				actionHandler.submitAvailability(startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), rules.getText());
+				actionHandler.submitAvailability(mode, startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), rules.getText());
 			}
 			else
 			{
-				actionHandler.submitChallenge(opponent.getText(), startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), world.getText(), location.getText(), rules.getText());
+				actionHandler.submitChallenge(mode, opponent.getText(), startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), world.getText(), location.getText(), rules.getText());
 			}
 		});
 		content.add(submit);

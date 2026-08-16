@@ -11,9 +11,16 @@ final class WarBoardFight
 	private final int combatMax;
 	private final String notes;
 	private final String status;
+	private final FightMode mode;
 
 	WarBoardFight(String id, String clanId, String opponentClanId, String startsAt, int durationMinutes,
 		int combatMin, int combatMax, String notes, String status)
+	{
+		this(id, clanId, opponentClanId, startsAt, durationMinutes, combatMin, combatMax, notes, status, FightMode.CWA);
+	}
+
+	WarBoardFight(String id, String clanId, String opponentClanId, String startsAt, int durationMinutes,
+		int combatMin, int combatMax, String notes, String status, FightMode mode)
 	{
 		this.id = id;
 		this.clanId = clanId;
@@ -24,6 +31,7 @@ final class WarBoardFight
 		this.combatMax = combatMax;
 		this.notes = notes;
 		this.status = status;
+		this.mode = mode == null ? FightMode.CWA : mode;
 	}
 
 	String getId() { return id; }
@@ -35,5 +43,6 @@ final class WarBoardFight
 	int getCombatMax() { return combatMax; }
 	String getNotes() { return notes; }
 	String getStatus() { return status; }
+	FightMode getMode() { return mode; }
 	boolean needsOpponent() { return opponentClanId == null || opponentClanId.trim().isEmpty(); }
 }

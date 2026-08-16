@@ -32,8 +32,8 @@ public class ClanWarBoardPluginTest
 		PluginDescriptor descriptor = ClanWarBoardPlugin.class.getAnnotation(PluginDescriptor.class);
 
 		assertEquals("Clan War Board", descriptor.name());
-		assertEquals("Lets clan leaders set up wilderness fights while members see the current war board.", descriptor.description());
-		assertArrayEquals(new String[] {"clan", "war", "pvp", "wilderness"}, descriptor.tags());
+		assertEquals("Sets up CWA and Wilderness clan fights with rankings and post-fight analysis.", descriptor.description());
+		assertArrayEquals(new String[] {"clan", "war", "pvp", "cwa", "wilderness"}, descriptor.tags());
 	}
 
 	@Test
@@ -374,6 +374,24 @@ public class ClanWarBoardPluginTest
 		assertEquals(422, metrics.getDamageInflicted());
 		assertEquals(355, metrics.getDamageReceived());
 		assertEquals(9, metrics.getThirdPartyDamage());
+	}
+
+	@Test
+	public void cwaIsPrimaryAndModePayloadsStaySeparate()
+	{
+		ClanWarBoardPanel panel = new ClanWarBoardPanel(new ClanWarBoardPanel.MatchActionHandler()
+		{
+			@Override public void reloadAll() { }
+			@Override public void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes) { }
+			@Override public void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules) { }
+		});
+		assertEquals(FightMode.CWA, panel.getMode());
+		String cwa = ClanWarBoardApiClient.challengeJson(FightMode.CWA, "Rivals", "2026-08-20T20:00:00Z", "30", "70", "126", "330", "Clan Wars Arena", "Matched opts");
+		String wildy = ClanWarBoardApiClient.challengeJson(FightMode.WILDY, "Rivals", "2026-08-20T20:00:00Z", "30", "70", "126", "330", "Ghorrock", "Returns");
+		assertTrue(cwa.contains("\"mode\":\"cwa\""));
+		assertTrue(cwa.contains("\"returnsAllowed\":false"));
+		assertTrue(wildy.contains("\"mode\":\"wildy\""));
+		assertTrue(wildy.contains("\"returnsAllowed\":true"));
 	}
 
 	public static void main(String[] args) throws Exception

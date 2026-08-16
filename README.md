@@ -1,10 +1,12 @@
 # Clan War Board
 
-Clan War Board is a RuneLite external plugin for OSRS clans to publish availability, send private challenge terms, and review consensual clan fights. It is an organization board—not an enemy tracker or scouting tool.
+Clan War Board is a RuneLite external plugin for OSRS clans to arrange and analyze Clan Wars Arena (CWA) and Wilderness fights. **CWA is primary** and **Wildy is secondary**. Each format has separate fights, history, clan/player ratings, and performance signals. It is an organization and post-fight analysis board—not a live enemy tracker or scouting tool.
 
 Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
 
 ## Panel workflow
+
+The full-width button at the top switches **CWA | Wildy**. CWA defaults to no-return rules and emphasizes damage pressure, tanking, pile participation, transitions, binds and survival. Wildy permits return/location-control metrics. The selected mode is locked into submitted fight terms.
 
 The side panel follows RuneLite's compact group-finder pattern: five fixed-width controls with tooltips, dense fight cards, count badges, explicit empty states, and a persistent connection footer:
 
@@ -57,7 +59,7 @@ The plugin talks only to the pinned HTTPS origin `https://salmon-dune-01c80c60f.
 
 | Method and route | Purpose / authorization |
 | --- | --- |
-| `GET /api/health`, `GET /api/clans`, `GET /api/public/availability` | Public service health, registered-clan profiles, and board state. |
+| `GET /api/health`, `GET /api/clans`, `GET /api/public/availability`, `GET /api/fight-modes` | Public service health, dual-rank clan profiles, board state, and CWA/Wildy schemas. |
 | `POST /api/plugin/register` | Sends installation UUID, player/clan names, observed rank, plugin version, and public-stats preference; returns a one-hour bearer session and capabilities. |
 | `POST /api/plugin/session/rotate` | `member:read`; revokes/replaces the current session. |
 | `GET /api/plugin/me/metrics` | `member:read`; returns owner-only aggregates and recent confirmed-fight events. |
@@ -110,3 +112,8 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls, player metrics, scheduled/private state, and queued telemetry before the new identity refresh completes.
 18. Confirm a failed refresh after changing identity cannot restore the previous identity's cached board or session.
 19. Confirm disabled telemetry produces no heartbeat, combat event, queue growth, batch request, or retry; turning it off clears an existing buffer immediately.
+20. Confirm the mode button starts on CWA, switches to Wildy without overflow, and sends distinct `mode`/`returnsAllowed` terms.
+
+## CWA research and scoring design
+
+See [`docs/CWA_RESEARCH_AND_TELEMETRY.md`](docs/CWA_RESEARCH_AND_TELEMETRY.md) for sourced CWA mechanics, community findings, player-performance metrics, exact RuneLite observation APIs, roster/outsider validation, ranking policy, privacy limits, and the post-fight minimap/log replay design.

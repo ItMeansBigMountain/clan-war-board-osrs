@@ -140,17 +140,28 @@ final class ClanWarBoardApiClient
 
 	static String availabilityJson(String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
+		return availabilityJson(FightMode.CWA, startsAt, duration, combatMin, combatMax, notes);
+	}
+
+	static String availabilityJson(FightMode mode, String startsAt, String duration, String combatMin, String combatMax, String notes)
+	{
 		return "{\"startsAt\":\"" + jsonEscape(startsAt) + "\",\"durationMinutes\":" + number(duration, "30") +
 			",\"combatMin\":" + number(combatMin, "70") + ",\"combatMax\":" + number(combatMax, "126") +
-			",\"notes\":\"" + jsonEscape(notes) + "\"}";
+			",\"mode\":\"" + mode.apiValue() + "\",\"notes\":\"" + jsonEscape(notes) + "\"}";
 	}
 
 	static String challengeJson(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	{
+		return challengeJson(FightMode.CWA, opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+	}
+
+	static String challengeJson(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
 	{
 		return "{\"opponentClanId\":\"" + jsonEscape(opponent) + "\",\"terms\":{" +
 			"\"location\":\"" + jsonEscape(location) + "\",\"world\":" + number(world, "0") +
 			",\"startsAt\":\"" + jsonEscape(startsAt) + "\",\"combatMin\":" + number(combatMin, "70") +
 			",\"combatMax\":" + number(combatMax, "126") + ",\"durationMinutes\":" + number(duration, "30") +
+			",\"mode\":\"" + mode.apiValue() + "\",\"returnsAllowed\":" + mode.isReturnsAllowed() +
 			",\"rules\":\"" + jsonEscape(rules) + "\"}}";
 	}
 
@@ -168,7 +179,7 @@ final class ClanWarBoardApiClient
 			JsonObject row = element.getAsJsonObject();
 			fights.add(new WarBoardFight(string(row, "id"), string(row, "creatorClanId"), string(row, "opponentClanId"),
 				string(row, "startsAt"), integer(row, "durationMinutes"), integer(row, "combatMin"), integer(row, "combatMax"),
-				string(row, "notes"), string(row, "status")));
+				string(row, "notes"), string(row, "status"), "wildy".equalsIgnoreCase(string(row, "mode")) ? FightMode.WILDY : FightMode.CWA));
 		}
 		return fights;
 	}
