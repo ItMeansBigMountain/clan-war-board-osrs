@@ -21,6 +21,13 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 3. **Medium — outsider state was asserted in copy but absent from event output.** Non-own-clan observations now carry the honest `outsider_or_unverified` classification rather than being assigned to either accepted clan.
 4. **Medium — replay summaries omitted the fight mode contract.** Public completed-fight summaries now include canonical `mode` and `returnsAllowed`, preserving CWA/Wildy interpretation during replay.
 
+## Fixed in the attacker-minded security pass
+
+1. **High — a single clan could unilaterally submit a winner and trigger rating changes.** Completion now records a canonical result proposal and requires the other participating clan to submit an identical result before the fight becomes completed or affects Elo. Mismatched and same-clan confirmations are rejected.
+2. **High — privacy and authority survived re-registration.** A previously public or privileged session remained valid after the same installation re-registered with private settings or changed identity evidence. Registration now revokes every prior session for that installation in memory and Cosmos before issuing the replacement.
+3. **High — the public rating audit leaked private accepted-roster hashes, exact fight terms, and arbitrary raw result metadata.** The public route now uses an explicit allowlist containing only rating provenance, the terms hash, bounded result fields, before/after ratings, deltas, and algorithm metadata. Full inputs remain persisted for internal audit and reversals.
+4. **Verified boundaries — replay proofs, nonce replay rejection, clock skew, per-session write throttling, immutable acceptance rosters, participant-only challenge access, server-granted leader/moderator capabilities, and generation-bound A→B→A client state all retain automated coverage.** Registration remains the residual unauthenticated abuse surface and should receive an edge/IP limiter at deployment because in-process limits are not reliable across Azure workers.
+
 ## Remaining release blockers
 
 1. **Closed in the authority/roster slice — server leader authority no longer trusts client rank alone.** `/api/plugin/register` now issues leader writes only to server-verified leader installations; submitted `clanRank` remains local/client evidence but is not sufficient for `leader:write` or `challenge:write`.
@@ -33,7 +40,7 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 ## Remaining release work
 
 1. **Deploy and probe the reconciled service commit.** The local source and suites are green, but the authority, roster, rating, and replay changes must be deployed before live behavior can be claimed.
-2. **Complete independent security and abuse review.** Server-issued authority, session persistence/rotation, roster snapshots, rating completion, telemetry consent, replay sanitization, and rate limits still require the queued red-team pass.
+2. **Closed — independent security and abuse review.** The attacker-minded pass fixed unilateral rating completion, stale privacy/authority sessions, and public rating-audit disclosure. Remaining deployment hardening is an Azure edge/IP limit on unauthenticated registration; authenticated writes already enforce nonce, clock-skew, optimistic-concurrency, and per-session limits.
 3. **Closed — leader/moderator operations.** Challenge lifecycle enforcement, participant disputes, evidence review, correction/void flows, rating reversal, moderation audit history, scoped capabilities, and member read-only views are implemented with service and plugin coverage.
 
 ## Release decision
