@@ -9,10 +9,22 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 - Public player visibility is separate and defaults private.
 - Leader UI and dispatch require both live RuneLite clan rank and a current identity-generation-bound server `leader:write` capability.
 - Player/clan state, sessions, cached board state, mutations, telemetry, session rotation, and completion UI use context plus a monotonic generation; A→B→A regression coverage exists.
-- Real zero-state exists in API, website counters/copy, plugin collections, and tests. Live production currently has one real plugin-registered clan and no rated fights.
+- Real zero-state exists in API, website counters/copy, plugin collections, and tests. Live production preserves the one real plugin-registered clan (`Rs Venom`) and truthfully has no availability posts, completed battles, or CWA/Wildy rating records.
 - CWA is primary; CWA and Wildy terms, records, and ratings are separate.
 - Every completed-fight website detail includes the replay canvas and honest no-events/no-position states.
-- Java 11 `clean test assemble` passed. All 35 service unit tests and both Playwright replay tests passed against the reconciled source. The earlier live health, clans, leaderboard, replay, zero-state, and dual-mode probes predate these unpublished commits and must be repeated after deployment.
+- Java 11 `clean test assemble` passed. All 42 service unit tests and both Playwright replay tests passed against the reconciled source. GitHub Actions run [32666470277](https://github.com/ItMeansBigMountain/clan-war-board-service/actions/runs/32666470277) deployed service commit `8f1faf4` successfully through Azure OIDC on 2026-08-23.
+
+## Live Azure deployment evidence — 2026-08-23
+
+- Canonical HTTPS origin: `https://salmon-dune-01c80c60f.7.azurestaticapps.net`.
+- `/api/health` returned HTTP 200 with `ok: true`, `storage: cosmos`, and `productionReadyStorage: true` after deployment.
+- `/api/clans` and `/api/clans/rs-venom` preserved the existing real plugin registration and exposed only the opted-in public member; no installation UUID/hash, session token, authority claim, or private roster field was returned.
+- CWA and Wildy leaderboard routes returned separate unrated standings; both `rating.v1` audit routes returned empty records.
+- Public availability and battle routes returned empty arrays with truthful no-real-fights copy. No production clan, challenge, fight, telemetry event, or rating record was seeded for verification.
+- The fight-mode contract returned CWA as primary/no-returns and Wildy as secondary/returns-allowed. A nonexistent replay summary returned HTTP 404, proving the service does not fabricate replay data.
+- Invalid registration returned HTTP 400 and an unauthenticated owner-metrics request returned HTTP 401.
+- `/`, `/clans`, `/fights`, `/leaderboard`, and `/results` each returned the rendered SPA over HTTPS with direct-route HTTP 200 responses and the deployed zero-state UI.
+- The release was additive and required no destructive production data rewrite: the existing Cosmos documents remained readable while new roster, moderation, result-confirmation, and rating-audit fields are created only by their authenticated workflows.
 
 ## Fixed in this audit slice
 
@@ -39,10 +51,10 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 
 ## Remaining release work
 
-1. **Deploy and probe the reconciled service commit.** The local source and suites are green, but the authority, roster, rating, and replay changes must be deployed before live behavior can be claimed.
+1. **Closed — deploy and probe the reconciled service commit.** Azure OIDC run 32666470277 deployed `8f1faf4`; live Cosmos health, privacy-filtered clan data, separate CWA/Wildy zero-state ratings, empty fight collections, replay-not-found behavior, invalid-write rejection, and all direct website routes were verified over HTTPS.
 2. **Closed — independent security and abuse review.** The attacker-minded pass fixed unilateral rating completion, stale privacy/authority sessions, and public rating-audit disclosure. Remaining deployment hardening is an Azure edge/IP limit on unauthenticated registration; authenticated writes already enforce nonce, clock-skew, optimistic-concurrency, and per-session limits.
 3. **Closed — leader/moderator operations.** Challenge lifecycle enforcement, participant disputes, evidence review, correction/void flows, rating reversal, moderation audit history, scoped capabilities, and member read-only views are implemented with service and plugin coverage.
 
 ## Release decision
 
-Not ready for a Plugin Hub PR. Keep this repository in `in-progress` until deployment probes and the queued security/moderation work pass. The open Who's Grinding submission also blocks opening another Plugin Hub PR by the user-approved queue rule.
+Deployment, security, moderation, and visual-QA gates are now closed. Keep this repository in `in-progress` until the queued isolated end-to-end release validation and Plugin Hub compliance/package review pass. The open Who's Grinding submission also blocks opening another Plugin Hub PR by the user-approved queue rule.
