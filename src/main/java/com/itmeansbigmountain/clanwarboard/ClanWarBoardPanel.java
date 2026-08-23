@@ -42,6 +42,7 @@ class ClanWarBoardPanel extends PluginPanel
 	private enum BoardFilter { OPEN, SCHEDULED }
 
 	private static final int CONTENT_WIDTH = PluginPanel.PANEL_WIDTH - PluginPanel.SCROLLBAR_WIDTH - (PluginPanel.BORDER_OFFSET * 2) - 18;
+	private static final int WRAP_WIDTH = CONTENT_WIDTH - 55;
 	private static final Color PANEL_BG = new Color(36, 32, 28);
 	private static final Color CARD_BG = new Color(49, 44, 38);
 	private static final Color BORDER = new Color(87, 78, 64);
@@ -140,6 +141,7 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void render()
 	{
+		updateFooter();
 		content.removeAll();
 		addModeSwitcher();
 		addTitle(selectedFight == null ? mode.getLabel() + " Board" : mode.getShortLabel() + " Fight Details");
@@ -170,7 +172,7 @@ class ClanWarBoardPanel extends PluginPanel
 		switcher.setMaximumSize(new Dimension(CONTENT_WIDTH, 30));
 		switcher.setForeground(Color.WHITE);
 		switcher.setBackground(mode == FightMode.CWA ? new Color(126, 67, 54) : new Color(55, 91, 57));
-		switcher.addActionListener(event -> { mode = mode.other(); selectedFight = null; render(); });
+		switcher.addActionListener(event -> { mode = mode.other(); selectedFight = null; updateFooter(); render(); });
 		content.add(switcher);
 		content.add(Box.createVerticalStrut(6));
 	}
@@ -180,16 +182,42 @@ class ClanWarBoardPanel extends PluginPanel
 		return mode;
 	}
 
+	void showModeForTesting(FightMode mode)
+	{
+		this.mode = mode == null ? FightMode.CWA : mode;
+		selectedFight = null;
+		render();
+	}
+
+	void showBoardForTesting()
+	{
+		tab = Tab.BOARD;
+		selectedFight = null;
+		render();
+	}
+
+	void showPrivateForTesting()
+	{
+		tab = Tab.PRIVATE;
+		selectedFight = null;
+		render();
+	}
+
+	String footerTextForTesting()
+	{
+		return footerStatus.getText();
+	}
+
 	private void addNavigation()
 	{
-		JPanel nav = new JPanel(new GridLayout(1, 5, 3, 0));
+		JPanel nav = new JPanel(new GridLayout(2, 3, 3, 3));
 		nav.setOpaque(false);
 		nav.setAlignmentX(Component.LEFT_ALIGNMENT);
-		nav.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
-		nav.add(navButton("C", "Clan overview", Tab.OVERVIEW));
-		nav.add(navButton("B", "Browse the war board", Tab.BOARD));
-		nav.add(navButton("+", "Create or challenge", Tab.PRIVATE));
-		nav.add(navButton("H", "Fight history", Tab.HISTORY));
+		nav.setMaximumSize(new Dimension(CONTENT_WIDTH, 66));
+		nav.add(navButton("Home", "Clan overview", Tab.OVERVIEW));
+		nav.add(navButton("Board", "Browse the war board", Tab.BOARD));
+		nav.add(navButton("New", "Create or challenge", Tab.PRIVATE));
+		nav.add(navButton("Hist", "Fight history", Tab.HISTORY));
 		JButton reload = new JButton(reloading ? "…" : "↻");
 		reload.setToolTipText("Reload all Clan War Board data");
 		reload.setMargin(new Insets(0, 0, 0, 0));
@@ -203,6 +231,7 @@ class ClanWarBoardPanel extends PluginPanel
 			actionHandler.reloadAll();
 		});
 		nav.add(reload);
+		nav.add(Box.createGlue());
 		content.add(nav);
 		content.add(Box.createVerticalStrut(8));
 	}
@@ -230,14 +259,15 @@ class ClanWarBoardPanel extends PluginPanel
 		}
 		else if (status.isOnline())
 		{
-			footerStatus.setText("Online • " + state.getAvailable().size() + " open • "
-				+ state.getScheduled().size() + " set");
+			footerStatus.setText(mode.getShortLabel() + ": "
+				+ modeFights(state.getAvailable()).size() + " open • "
+				+ modeFights(state.getScheduled()).size() + " set");
 			footerStatus.setToolTipText(status.getMessage());
 			footerStatus.setForeground(SUCCESS);
 		}
 		else
 		{
-			footerStatus.setText("Offline • use ↻ to reconnect");
+			footerStatus.setText("Offline • use ↻");
 			footerStatus.setToolTipText(status.getMessage());
 			footerStatus.setForeground(MUTED);
 		}
@@ -245,11 +275,14 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void renderOverview()
 	{
+		List<WarBoardFight> modeAvailable = modeFights(state.getAvailable());
+		List<WarBoardFight> modeScheduled = modeFights(state.getScheduled());
+		List<WarBoardFight> modeHistory = modeFights(state.getHistory());
 		addCard("Clan overview", new String[] {
 			"Clan: " + clean(clanName, "No clan detected"),
 			"Member: " + clean(playerName, "Unknown"),
 			"Rank: " + clean(rankName, "Unknown"),
-			"Plugin installs: " + state.getInstalledMembers() + "/" + state.getClanMembers(),
+			installLine(),
 			leader ? "Leader tools: enabled" : "War posts: read-only"
 		}, leader ? ACCENT : MUTED);
 		PlayerWarMetrics metrics = state.getPlayerMetrics();
@@ -267,13 +300,13 @@ class ClanWarBoardPanel extends PluginPanel
 			"Tracked war events: " + metrics.getEventsTracked()
 		}, ACCENT);
 		addCard(mode.getShortLabel() + " fight record", new String[] {
-			"Previous fights: " + state.getHistory().size(),
-			"Scheduled fights: " + state.getScheduled().size(),
-			openFightCountLabel(state.getAvailableCount())
+			"Previous fights: " + modeHistory.size(),
+			"Scheduled fights: " + modeScheduled.size(),
+			openFightCountLabel(modeAvailable.size())
 		}, TEXT);
-		WarBoardFight next = state.getNextScheduled();
+		WarBoardFight next = nextScheduledFight(modeScheduled);
 		addCard("Next planned war", next == null
-			? new String[] {"No future war is currently scheduled."}
+			? new String[] {"No future " + mode.getShortLabel() + " war is currently scheduled."}
 			: fightLines(next), next == null ? MUTED : SUCCESS);
 		addConnectionCard();
 	}
@@ -287,10 +320,11 @@ class ClanWarBoardPanel extends PluginPanel
 		header.add(label("Fights", 14, Font.BOLD, TEXT), BorderLayout.WEST);
 		if (canCreateFight(leader))
 		{
-			JButton create = new JButton("+");
+			JButton create = new JButton("New");
 			create.setToolTipText("Create fight");
 			create.setFocusable(false);
-			create.setPreferredSize(new Dimension(38, 30));
+			create.setMargin(new Insets(0, 0, 0, 0));
+			create.setPreferredSize(new Dimension(54, 30));
 			create.setForeground(Color.WHITE);
 			create.setBackground(new Color(62, 94, 125));
 			create.addActionListener(event -> {
@@ -307,8 +341,8 @@ class ClanWarBoardPanel extends PluginPanel
 		filters.setOpaque(false);
 		filters.setAlignmentX(Component.LEFT_ALIGNMENT);
 		filters.setMaximumSize(new Dimension(CONTENT_WIDTH, 32));
-		filters.add(filterButton("Open (" + modeFights(state.getAvailable()).size() + ")", BoardFilter.OPEN));
-		filters.add(filterButton("Scheduled (" + modeFights(state.getScheduled()).size() + ")", BoardFilter.SCHEDULED));
+		filters.add(filterButton("Open " + modeFights(state.getAvailable()).size(), BoardFilter.OPEN));
+		filters.add(filterButton("Set " + modeFights(state.getScheduled()).size(), BoardFilter.SCHEDULED));
 		content.add(filters);
 		content.add(Box.createVerticalStrut(8));
 		List<WarBoardFight> fights = modeFights(filter == BoardFilter.OPEN ? state.getAvailable() : state.getScheduled());
@@ -362,14 +396,31 @@ class ClanWarBoardPanel extends PluginPanel
 		return result;
 	}
 
+	private static WarBoardFight nextScheduledFight(List<WarBoardFight> fights)
+	{
+		ClanWarBoardState state = new ClanWarBoardState(ClanWarBoardApiStatus.online("", 0, 0), 0, 0,
+			Collections.emptyList(), fights, Collections.emptyList());
+		return state.getNextScheduled();
+	}
+
+	private String installLine()
+	{
+		if (state.getClanMembers() <= 0)
+		{
+			return "Plugin installs: " + state.getInstalledMembers() + " tracked; clan size pending";
+		}
+		return "Plugin installs: " + state.getInstalledMembers() + "/" + state.getClanMembers();
+	}
+
 	private void addSectionHeader(String title, String detail)
 	{
-		JPanel header = new JPanel(new BorderLayout());
+		JPanel header = new JPanel();
+		header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
 		header.setOpaque(false);
 		header.setAlignmentX(Component.LEFT_ALIGNMENT);
-		header.setMaximumSize(new Dimension(CONTENT_WIDTH, 28));
-		header.add(label(title, 14, Font.BOLD, TEXT), BorderLayout.WEST);
-		header.add(label(detail, 11, Font.PLAIN, MUTED), BorderLayout.EAST);
+		header.setMaximumSize(new Dimension(CONTENT_WIDTH, 42));
+		header.add(label(title, 14, Font.BOLD, TEXT));
+		header.add(label(detail, 11, Font.PLAIN, MUTED));
 		content.add(header);
 		content.add(Box.createVerticalStrut(6));
 	}
@@ -542,6 +593,7 @@ class ClanWarBoardPanel extends PluginPanel
 	private static String[] fightLines(WarBoardFight fight)
 	{
 		return new String[] {
+			"Mode: " + fight.getMode().getLabel(),
 			fight.needsOpponent() ? "Opponent: needed" : "Opponent: " + clean(fight.getOpponentClanId(), "TBD"),
 			"Start: " + clean(fight.getStartsAt(), "TBD"),
 			"Duration: " + fight.getDurationMinutes() + " minutes",
@@ -552,7 +604,7 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private void addTitle(String text)
 	{
-		JLabel label = label(text, 18, Font.BOLD, TEXT);
+		JLabel label = wrapped(text, 18, Font.BOLD, TEXT);
 		label.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(label);
 		content.add(Box.createVerticalStrut(8));
@@ -587,7 +639,12 @@ class ClanWarBoardPanel extends PluginPanel
 
 	private static JLabel wrapped(String text, int size, Color color)
 	{
-		JLabel label = label("<html><body style='width:" + (CONTENT_WIDTH - 30) + "px'>" + escape(text) + "</body></html>", size, Font.PLAIN, color);
+		return wrapped(text, size, Font.PLAIN, color);
+	}
+
+	private static JLabel wrapped(String text, int size, int style, Color color)
+	{
+		JLabel label = label("<html><body style='width:" + WRAP_WIDTH + "px'>" + escape(text) + "</body></html>", size, style, color);
 		label.setAlignmentX(Component.LEFT_ALIGNMENT);
 		return label;
 	}

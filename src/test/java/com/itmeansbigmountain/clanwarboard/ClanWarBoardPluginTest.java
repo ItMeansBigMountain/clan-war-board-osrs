@@ -155,27 +155,106 @@ public class ClanWarBoardPluginTest
 	@Test
 	public void osPartyInspiredPanelRendersRepresentativeBoardState() throws Exception
 	{
-		WarBoardFight open = new WarBoardFight("open", "rivals", null, "2026-08-04T20:00:00Z", 30, 70, 126, "Matched opts", "open");
-		WarBoardFight scheduled = new WarBoardFight("scheduled", "trapistan", "rivals", "2026-08-05T20:00:00Z", 30, 70, 126, "Matched opts", "scheduled");
-		WarBoardFight completed = new WarBoardFight("completed", "trapistan", "rivals", "2026-08-01T20:00:00Z", 30, 70, 126, "Complete", "completed");
+		WarBoardFight open = new WarBoardFight("open", "rivals", null, "2026-08-04T20:00:00Z", 30, 70, 126, "Matched opts", "open", FightMode.CWA);
+		WarBoardFight scheduled = new WarBoardFight("scheduled", "trapistan", "rivals", "2026-08-05T20:00:00Z", 30, 70, 126, "Matched opts", "scheduled", FightMode.CWA);
+		WarBoardFight completed = new WarBoardFight("completed", "trapistan", "rivals", "2026-08-01T20:00:00Z", 30, 70, 126, "Complete", "completed", FightMode.CWA);
+		WarBoardFight wildy = new WarBoardFight("wildy", "deep-team", null, "2026-08-06T20:00:00Z", 45, 90, 126, "Returns allowed", "open", FightMode.WILDY);
 		ClanWarBoardState sample = new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 2, 3), 11, 60,
-			Collections.singletonList(open), Collections.singletonList(scheduled), Collections.singletonList(completed));
-		ClanWarBoardPanel panel = new ClanWarBoardPanel(new ClanWarBoardPanel.MatchActionHandler()
+			java.util.Arrays.asList(open, wildy), Collections.singletonList(scheduled), Collections.singletonList(completed));
+		ClanWarBoardPanel panel = new ClanWarBoardPanel(noopPanelActions());
+		panel.update("TRAPISTAN", "Oyama", "General", true, sample);
+		BufferedImage image = renderPanelScreenshot(panel, "clan-war-board-panel.png");
+		assertTrue(panel.getComponentCount() >= 2);
+		assertTrue(image.getRGB(10, 10) != 0);
+		assertTrue(panelText(panel).contains("Clan Wars Arena Board"));
+		assertEquals("CWA: 1 open • 1 set", panel.footerTextForTesting());
+
+		panel.showModeForTesting(FightMode.WILDY);
+		panel.showBoardForTesting();
+		renderPanelScreenshot(panel, "clan-war-board-wildy-board.png");
+		String wildyText = panelText(panel);
+		assertTrue(wildyText.contains("Wilderness Board"));
+		assertTrue(wildyText.contains("Open 1"));
+		assertTrue(wildyText.contains("Set 0"));
+		assertFalse(wildyText.contains("Clan Wars Arena Board"));
+		assertEquals("Wildy: 1 open • 0 set", panel.footerTextForTesting());
+	}
+
+	@Test
+	public void panelRendersMemberAndZeroErrorStatesTruthfully() throws Exception
+	{
+		ClanWarBoardPanel memberPanel = new ClanWarBoardPanel(noopPanelActions());
+		memberPanel.update("TRAPISTAN", "Member", "Sergeant", false,
+			new ClanWarBoardState(ClanWarBoardApiStatus.online("Connected", 1, 0), 0, 0,
+				Collections.emptyList(), Collections.emptyList(), Collections.emptyList()));
+		assertTrue(panelText(memberPanel).contains("Plugin installs: 0 tracked; clan size pending"));
+		memberPanel.showPrivateForTesting();
+		renderPanelScreenshot(memberPanel, "clan-war-board-member-readonly.png");
+		String memberText = panelText(memberPanel);
+		assertTrue(memberText.contains("Read only"));
+		assertTrue(memberText.contains("Only a server-authorized clan administrator can create posts or send match terms."));
+		assertFalse(memberText.contains("Post to War Board"));
+
+		ClanWarBoardPanel offlinePanel = new ClanWarBoardPanel(noopPanelActions());
+		offlinePanel.update(null, null, null, false, ClanWarBoardState.offline("HTTP 503"));
+		renderPanelScreenshot(offlinePanel, "clan-war-board-offline-empty.png");
+		String offlineText = panelText(offlinePanel);
+		assertTrue(offlineText.contains("No clan detected"));
+		assertTrue(offlineText.contains("No future CWA war is currently scheduled."));
+		assertTrue(offlineText.contains("HTTP 503"));
+		assertEquals("Offline • use ↻", offlinePanel.footerTextForTesting());
+	}
+
+	private static ClanWarBoardPanel.MatchActionHandler noopPanelActions()
+	{
+		return new ClanWarBoardPanel.MatchActionHandler()
 		{
 			@Override public void reloadAll() { }
 			@Override public void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes) { }
 			@Override public void submitChallenge(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules) { }
-		});
-		panel.update("TRAPISTAN", "Oyama", "General", true, sample);
-		panel.setSize(ClanWarBoardPanel.PANEL_WIDTH, 700);
+		};
+	}
+
+	private static BufferedImage renderPanelScreenshot(ClanWarBoardPanel panel, String name) throws Exception
+	{
+		panel.setSize(ClanWarBoardPanel.PANEL_WIDTH, 760);
 		layoutTree(panel);
-		BufferedImage image = new BufferedImage(ClanWarBoardPanel.PANEL_WIDTH, 700, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage image = new BufferedImage(ClanWarBoardPanel.PANEL_WIDTH, 760, BufferedImage.TYPE_INT_ARGB);
 		panel.paint(image.getGraphics());
-		File screenshot = new File("build/reports/clan-war-board-panel.png");
+		File screenshot = new File("build/reports/" + name);
 		screenshot.getParentFile().mkdirs();
 		ImageIO.write(image, "png", screenshot);
-		assertTrue(panel.getComponentCount() >= 2);
-		assertTrue(image.getRGB(10, 10) != 0);
+		return image;
+	}
+
+	private static String panelText(Component component)
+	{
+		StringBuilder text = new StringBuilder();
+		appendPanelText(component, text);
+		return text.toString();
+	}
+
+	private static void appendPanelText(Component component, StringBuilder text)
+	{
+		if (component instanceof javax.swing.JLabel)
+		{
+			text.append(' ').append(((javax.swing.JLabel) component).getText());
+		}
+		if (component instanceof javax.swing.AbstractButton)
+		{
+			text.append(' ').append(((javax.swing.AbstractButton) component).getText());
+		}
+		if (component instanceof javax.swing.text.JTextComponent)
+		{
+			text.append(' ').append(((javax.swing.text.JTextComponent) component).getText());
+		}
+		if (component instanceof Container)
+		{
+			for (Component child : ((Container) component).getComponents())
+			{
+				appendPanelText(child, text);
+			}
+		}
 	}
 
 	private static void layoutTree(Container container)
