@@ -254,7 +254,7 @@ class ClanWarBoardPanel extends PluginPanel
 		ClanWarBoardApiStatus status = state.getStatus();
 		if (reloading)
 		{
-			footerStatus.setText("Refreshing clan, board, history and statistics…");
+			footerStatus.setText("Refreshing clan, board and history…");
 			footerStatus.setForeground(ACCENT);
 		}
 		else if (status.isOnline())
@@ -285,20 +285,6 @@ class ClanWarBoardPanel extends PluginPanel
 			installLine(),
 			leader ? "Leader tools: enabled" : "War posts: read-only"
 		}, leader ? ACCENT : MUTED);
-		PlayerWarMetrics metrics = state.getPlayerMetrics();
-		addCard("My " + mode.getShortLabel() + " statistics", new String[] {
-			"Fights observed: " + metrics.getFightsObserved(),
-			"Observed kills: " + metrics.getObservedKills(),
-			"Deaths: " + metrics.getDeaths(),
-			mode.isReturnsAllowed() ? "Returns: " + metrics.getReturns() : "Returns: disabled in CWA",
-			"Opponent damage: " + metrics.getOpponentDamage(),
-			"Friendly-fire damage: " + metrics.getFriendlyFireDamage(),
-			"Total damage inflicted: " + metrics.getDamageInflicted(),
-			"Damage received: " + metrics.getDamageReceived(),
-			"Third-party damage: " + metrics.getThirdPartyDamage(),
-			"Activity samples: " + metrics.getActivitySamples(),
-			"Tracked war events: " + metrics.getEventsTracked()
-		}, ACCENT);
 		addCard(mode.getShortLabel() + " fight record", new String[] {
 			"Previous fights: " + modeHistory.size(),
 			"Scheduled fights: " + modeScheduled.size(),

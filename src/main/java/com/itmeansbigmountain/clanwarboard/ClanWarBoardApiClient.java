@@ -76,8 +76,7 @@ final class ClanWarBoardApiClient
 			List<WarBoardFight> open = parseFights(availability, "availability");
 			List<WarBoardFight> scheduled = parseFights(availability, "scheduled");
 			List<WarBoardFight> history = parseFights(availability, "history");
-			PlayerWarMetrics metrics = session == null ? PlayerWarMetrics.empty()
-				: parsePlayerMetrics(get("/api/plugin/me/metrics", authenticatedHeaders(session.getToken())));
+			PlayerWarMetrics metrics = PlayerWarMetrics.empty();
 			ClanWarBoardApiStatus status = ClanWarBoardApiStatus.online("Connected to Clan War Board", clanRows.size(), open.size());
 			return new ClanWarBoardState(status, installedMembers, clanMemberCount, open, scheduled, history, metrics);
 		}

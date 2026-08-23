@@ -8,15 +8,15 @@ Community launch, clan-leader onboarding, privacy disclosure, moderation contact
 
 ## Panel workflow
 
-The full-width button at the top switches **CWA | Wildy**. CWA defaults to no-return rules and emphasizes damage pressure, tanking, pile participation, transitions, binds and survival. Wildy permits return/location-control metrics. The selected mode is locked into submitted fight terms.
+The full-width button at the top switches **CWA | Wildy**. CWA defaults to no-return rules; Wildy permits returns. The selected mode is locked into leader-entered fight terms, and each mode keeps a separate clan-level record and rating.
 
 The side panel follows RuneLite's compact group-finder pattern: five fixed-width controls with tooltips, dense fight cards, count badges, explicit empty states, and a persistent connection footer:
 
-1. **C — Clan** — clan overview, installed-plugin coverage, fight counts, next war, and the authenticated player's persisted aggregate war metrics.
+1. **C — Clan** — clan overview, installed-plugin coverage, clan-level fight counts, and the next planned war.
 2. **B — Board** — switch between count-badged **Open** and **Scheduled** lists. Members see truthful read-only cards. Server-authorized leaders can open an availability post and use it to prefill a new private challenge draft.
 3. **+ — Create** — server-authorized leaders can publish a public availability post or send exact private terms to another clan. The form separates common fight fields from private challenge terms.
 4. **H — History** — browse completed, service-verified fights and open their details without mixing them into the active board.
-5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter.
+5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, and history without changing the current page or Board filter.
 
 The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time. A transient service failure preserves the last good immutable board snapshot and marks it offline instead of showing a false empty board, but only while the player/clan identity generation is unchanged. Refresh responses, cached snapshots, sessions, mutations, and completion messages are bound to both the player/clan identity and the monotonic login generation that created them. Leader writes are revalidated against live clan membership and rank on RuneLite's client thread immediately before dispatch. Identity changes immediately clear private state, stale and A→B→A responses are rejected, and a refresh for the current identity follows.
 
@@ -62,7 +62,6 @@ The plugin talks only to the pinned HTTPS origin `https://salmon-dune-01c80c60f.
 | `GET /api/health`, `GET /api/clans`, `GET /api/public/availability`, `GET /api/fight-modes` | Public service health, registered-clan counts, board state, and CWA/Wildy schemas. |
 | `POST /api/plugin/register` | Sends installation UUID, the local player's name, primary-clan name, observed rank, and plugin version; returns a one-hour bearer session and capabilities. It does not send the clan roster or observations about other players. |
 | `POST /api/plugin/session/rotate` | `member:read`; revokes/replaces the current session. |
-| `GET /api/plugin/me/metrics` | `member:read`; returns owner-only aggregates and recent confirmed-fight events. |
 | `POST /api/plugin/availability` | `leader:write`; sends availability terms. |
 | `POST /api/plugin/challenges` | `challenge:write`; sends exact proposed terms to another clan. |
 
@@ -100,16 +99,16 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 8. Confirm login text is visible and reflects current board data.
 9. Confirm empty API collections remain truthful empty states.
 10. Confirm History shows only completed service fights and preserves its own back navigation.
-11. Confirm ↻ preserves the current page/filter, disables while loading, and refreshes the Clan metrics card.
+11. Confirm ↻ preserves the current page/filter, disables while loading, and refreshes the clan-level record card.
 12. Confirm passive board refresh runs no more than once per 60 seconds and never overlaps another refresh.
 13. Confirm a failed refresh keeps the last board cards visible while the footer reports offline/cached state.
 14. Confirm changing player or primary clan during a refresh cannot install the previous identity's response.
 15. Confirm invalid time, duration, combat range, world, or location stays in the form with an inline error and sends no request.
 16. Confirm repeated submission clicks cannot create duplicate in-flight fight requests.
-17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls, player metrics, and scheduled/private state before the new identity refresh completes.
+17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls and scheduled/private state before the new identity refresh completes.
 18. Confirm a failed refresh after changing identity cannot restore the previous identity's cached board or session.
 19. Confirm the mode button starts on CWA, switches to Wildy without overflow, and sends distinct `mode`/`returnsAllowed` terms.
 
-## CWA research and scoring design
+## Historical research
 
-See [`docs/CWA_RESEARCH_AND_TELEMETRY.md`](docs/CWA_RESEARCH_AND_TELEMETRY.md) for sourced CWA mechanics, community findings, player-performance metrics, exact RuneLite observation APIs, roster/outsider validation, ranking policy, privacy limits, and the post-fight minimap/log replay design.
+Earlier design research explored telemetry-based scoring and replay concepts. Those concepts are not part of the 1.0.0 production plugin. The shipped model is limited to board registration, leader-entered terms, and mutually confirmed clan-level results as described above.
