@@ -1,8 +1,10 @@
 # Clan War Board
 
-Clan War Board is a RuneLite external plugin for OSRS clans to arrange and analyze Clan Wars Arena (CWA) and Wilderness fights. **CWA is primary** and **Wildy is secondary**. Each format has separate fights, history, clan/player ratings, and performance signals. It is an organization and post-fight analysis board—not a live enemy tracker or scouting tool.
+Clan War Board is a RuneLite external plugin for OSRS clans to arrange and record Clan Wars Arena (CWA) and Wilderness fights. **CWA is primary** and **Wildy is secondary**. Each format has separate fights, history, and clan ratings. It is an organization and mutually confirmed results board—not a live enemy tracker, scouting tool, or combat analytics collector.
 
 Public website: https://salmon-dune-01c80c60f.7.azurestaticapps.net/
+
+Community launch, clan-leader onboarding, privacy disclosure, moderation contacts, DNS decision gate, and adoption metrics: [`docs/COMMUNITY_LAUNCH_PLAYBOOK.md`](docs/COMMUNITY_LAUNCH_PLAYBOOK.md).
 
 ## Panel workflow
 

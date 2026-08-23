@@ -14,10 +14,9 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 ## Verified
 
 - Core board sync is required and pinned to the production HTTPS service; there is no sync-disable or endpoint override.
-- `Share War Telemetry` is separate, defaults off, gates subscribers/heartbeats/queue/drain/worker/requeue, and clears buffered attribution on opt-out.
-- Public player visibility is separate and defaults private.
+- The production plugin has no combat/location telemetry lane, roster upload, nearby-player profile, opponent observation, player-visibility control, or overhead rendering.
 - Leader UI and dispatch require both live RuneLite clan rank and a current identity-generation-bound server `leader:write` capability.
-- Player/clan state, sessions, cached board state, mutations, telemetry, session rotation, and completion UI use context plus a monotonic generation; A→B→A regression coverage exists.
+- Player/clan state, sessions, cached board state, mutations, session rotation, and completion UI use context plus a monotonic generation; A→B→A regression coverage exists.
 - Real zero-state exists in API, website counters/copy, plugin collections, and tests. Live production preserves the one real plugin-registered clan (`Rs Venom`) and truthfully has no availability posts, completed battles, or CWA/Wildy rating records.
 - CWA is primary; CWA and Wildy terms, records, and ratings are separate.
 - Every completed-fight website detail includes the replay canvas and honest no-events/no-position states.
@@ -66,7 +65,7 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 
 ## Release decision
 
-Deployment, security, moderation, and visual-QA gates are now closed. Keep this repository in `in-progress` until the queued isolated end-to-end release validation and Plugin Hub compliance/package review pass. The open Who's Grinding submission also blocks opening another Plugin Hub PR by the user-approved queue rule.
+Deployment, security, moderation, visual-QA, isolated release validation, and Plugin Hub compliance/package gates are closed. The release candidate is in `pr-review-pending`; the open Who's Grinding submission still blocks opening another Plugin Hub PR under the user-approved queue rule.
 
 ## P0 release validation — 2026-08-23T21:24:35Z
 
