@@ -35,6 +35,7 @@ class ClanWarBoardPanel extends PluginPanel
 		{
 			submitChallenge(opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
 		}
+		default void submitChallengeAction(String challengeId, String action, String reason) { }
 	}
 
 	private enum Tab { OVERVIEW, BOARD, PRIVATE, HISTORY }
@@ -115,6 +116,21 @@ class ClanWarBoardPanel extends PluginPanel
 	static boolean canCreateFight(boolean leader)
 	{
 		return leader;
+	}
+
+	static boolean canActOnChallenge(String status, String action, boolean leader)
+	{
+		if (!leader || status == null || action == null)
+		{
+			return false;
+		}
+		String state = status.trim().toLowerCase();
+		String requested = action.trim().toLowerCase();
+		if ("proposed".equals(state) || "reconfirm_required".equals(state))
+		{
+			return "accept".equals(requested) || "counter".equals(requested) || "reject".equals(requested) || "cancel".equals(requested);
+		}
+		return "completed".equals(state) && "dispute".equals(requested);
 	}
 
 	static String openFightCountLabel(int count)
@@ -475,6 +491,24 @@ class ClanWarBoardPanel extends PluginPanel
 			}
 		});
 		content.add(submit);
+		content.add(Box.createVerticalStrut(12));
+		content.add(label("Manage an existing fight", 13, Font.BOLD, TEXT));
+		content.add(wrapped("Use the fight ID from the board. Accept/cancel follow the locked lifecycle; dispute records a reason for moderator review.", 11, MUTED));
+		JTextField challengeId = field("");
+		JTextField actionReason = field("");
+		addField("Fight ID", challengeId);
+		addField("Dispute reason (required for dispute)", actionReason);
+		JPanel actions = new JPanel(new GridLayout(1, 3, 4, 0));
+		actions.setOpaque(false);
+		actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+		actions.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
+		for (String action : new String[] {"Accept", "Cancel", "Dispute"})
+		{
+			JButton button = new JButton(action);
+			button.addActionListener(event -> actionHandler.submitChallengeAction(challengeId.getText(), action.toLowerCase(), actionReason.getText()));
+			actions.add(button);
+		}
+		content.add(actions);
 	}
 
 	private void addField(String title, JTextField field)

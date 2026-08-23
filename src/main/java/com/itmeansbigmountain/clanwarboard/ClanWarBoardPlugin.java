@@ -145,6 +145,12 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				ClanWarBoardPlugin.this.submitChallenge(mode, opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
 			}
+
+			@Override
+			public void submitChallengeAction(String challengeId, String action, String reason)
+			{
+				ClanWarBoardPlugin.this.submitChallengeAction(challengeId, action, reason);
+			}
 		});
 		navButton = NavigationButton.builder()
 			.tooltip(PLUGIN_NAME)
@@ -659,6 +665,44 @@ public class ClanWarBoardPlugin extends Plugin
 				}
 			}, () -> matchActionInFlight.set(false));
 		});
+	}
+
+	private void submitChallengeAction(String challengeId, String action, String reason)
+	{
+		ClanWarBoardSession current = session;
+		String actionContext = sessionContext;
+		long actionGeneration = sessionGeneration;
+		if (!isActionIdentityCurrent(current, actionContext, actionGeneration))
+		{
+			showActionMessage("Leader authorization is not available.", Color.RED);
+			return;
+		}
+		if ("dispute".equals(action) && (reason == null || reason.trim().isEmpty()))
+		{
+			showActionMessage("A dispute reason is required.", Color.RED);
+			return;
+		}
+		if (!tryBeginAction(matchActionInFlight))
+		{
+			showActionMessage("A fight update is already being sent.", Color.CYAN);
+			return;
+		}
+		submitAsync(executorService, () ->
+		{
+			try
+			{
+				apiClient.postChallengeAction(current, challengeId, ClanWarBoardApiClient.challengeActionJson(action, reason));
+				completeActionIfCurrent(current, actionContext, actionGeneration, "Fight " + action + " submitted.", Color.GREEN, true);
+			}
+			catch (IOException | IllegalArgumentException ex)
+			{
+				completeActionIfCurrent(current, actionContext, actionGeneration, "Fight update failed: " + ex.getMessage(), Color.RED, false);
+			}
+			finally
+			{
+				matchActionInFlight.set(false);
+			}
+		}, () -> matchActionInFlight.set(false));
 	}
 
 	private boolean isActionIdentityCurrent(ClanWarBoardSession candidate, String context, long generation)

@@ -209,6 +209,41 @@ final class ClanWarBoardApiClient
 		return post("/api/plugin/challenges", json, authenticatedHeaders(session.getToken()));
 	}
 
+	String fetchChallenges(ClanWarBoardSession session) throws IOException
+	{
+		return get("/api/plugin/challenges", authenticatedHeaders(session.getToken()));
+	}
+
+	String postChallengeAction(ClanWarBoardSession session, String challengeId, String json) throws IOException
+	{
+		return post("/api/plugin/challenges/" + safeId(challengeId) + "/actions", json, authenticatedHeaders(session.getToken()));
+	}
+
+	static String challengeActionJson(String action, String reason)
+	{
+		String normalized = action == null ? "" : action.trim().toLowerCase();
+		if ("dispute".equals(normalized))
+		{
+			return "{\"action\":\"dispute\",\"reasonCode\":\"other\",\"statement\":\"" + jsonEscape(reason) + "\"}";
+		}
+		return "{\"action\":\"" + jsonEscape(normalized) + "\"}";
+	}
+
+	String fetchModerationAudit(ClanWarBoardSession session, String challengeId) throws IOException
+	{
+		return get("/api/plugin/challenges/" + safeId(challengeId) + "/moderation", authenticatedHeaders(session.getToken()));
+	}
+
+	private static String safeId(String value)
+	{
+		String id = value == null ? "" : value.trim();
+		if (!id.matches("[A-Za-z0-9-]{1,128}"))
+		{
+			throw new IllegalArgumentException("Invalid challenge id");
+		}
+		return id;
+	}
+
 
 	void submitTelemetry(ClanWarBoardSession session, List<ClanWarBoardTelemetryEvent> events) throws IOException
 	{

@@ -518,6 +518,43 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
+	public void leaderAndMemberOperationsUseAuthenticatedPanelEndpoints() throws Exception
+	{
+		try (MockWebServer server = new MockWebServer())
+		{
+			server.start();
+			ClanWarBoardApiClient client = testApiClient(server);
+			server.enqueue(jsonResponse("{\"ok\":true,\"challenges\":[]}"));
+			server.enqueue(jsonResponse("{\"ok\":true}"));
+			server.enqueue(jsonResponse("{\"ok\":true,\"records\":[]}"));
+			client.fetchChallenges(testSession());
+			client.postChallengeAction(testSession(), "fight-1", "{\"action\":\"dispute\",\"reasonCode\":\"third_party_interference\"}");
+			client.fetchModerationAudit(testSession(), "fight-1");
+
+			RecordedRequest inbox = server.takeRequest(1, TimeUnit.SECONDS);
+			RecordedRequest dispute = server.takeRequest(1, TimeUnit.SECONDS);
+			RecordedRequest audit = server.takeRequest(1, TimeUnit.SECONDS);
+			assertEquals("GET", inbox.getMethod());
+			assertEquals("/api/plugin/challenges", inbox.getPath());
+			assertEquals("/api/plugin/challenges/fight-1/actions", dispute.getPath());
+			assertTrue(dispute.getBody().readUtf8().contains("third_party_interference"));
+			assertEquals("/api/plugin/challenges/fight-1/moderation", audit.getPath());
+			assertEquals("Bearer token", audit.getHeader("Authorization"));
+		}
+	}
+
+	@Test
+	public void panelActionPolicyKeepsMembersReadOnlyAndLeadersWithinLifecycle()
+	{
+		assertTrue(ClanWarBoardPanel.canActOnChallenge("proposed", "accept", true));
+		assertTrue(ClanWarBoardPanel.canActOnChallenge("proposed", "counter", true));
+		assertTrue(ClanWarBoardPanel.canActOnChallenge("completed", "dispute", true));
+		assertFalse(ClanWarBoardPanel.canActOnChallenge("completed", "accept", true));
+		assertFalse(ClanWarBoardPanel.canActOnChallenge("proposed", "accept", false));
+		assertFalse(ClanWarBoardPanel.canActOnChallenge("disputed", "void", true));
+	}
+
+	@Test
 	public void rejectedExecutorRunsCleanupWithoutLeakingInFlightState()
 	{
 		AtomicBoolean cleaned = new AtomicBoolean(false);

@@ -28,12 +28,13 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 3. **Closed in the network/lifecycle coverage slice — plugin network and async regressions now have Java coverage.** MockWebServer tests exercise reordered board JSON, malformed/empty API responses, generation-safe delayed A→B→A behavior, privacy-specific registration and telemetry request bodies, telemetry opt-out discard behavior after drain, and executor rejection cleanup.
 4. **Closed in the browser replay coverage slice — replay UI now has automated browser coverage.** Playwright tests exercise completed-fight replay play, pause, scrub, no-position event rendering, and mode-specific completed-fight terms using routed fixture API responses.
 5. **Closed in the dual-rating slice — verified results now drive separate versioned ratings.** `rating.v1` applies Elo independently per CWA/Wildy mode only after mutual acceptance, immutable roster snapshots, sufficient telemetry confidence, and a non-disputed result. Every applied update persists its exact inputs, algorithm, before/after ratings, and deltas; the public audit route exposes those records.
+6. **Closed in the moderation/leader-operations slice — result disputes and safe moderator decisions are auditable.** Participants can dispute completed results with bounded outsider/crasher/telemetry evidence, immediately reversing any applied rating. Only server-verified moderator installations receive `moderation:write`; correction and void decisions require a reason, persist an append-only audit record, and expose a sanitized member read-only history. Terminal challenge states reject stale accept/counter/cancel actions. The RuneLite panel now keeps accept, cancel, and dispute forms in the panel rather than config.
 
 ## Remaining release work
 
 1. **Deploy and probe the reconciled service commit.** The local source and suites are green, but the authority, roster, rating, and replay changes must be deployed before live behavior can be claimed.
 2. **Complete independent security and abuse review.** Server-issued authority, session persistence/rotation, roster snapshots, rating completion, telemetry consent, replay sanitization, and rate limits still require the queued red-team pass.
-3. **Complete leader/moderator operations.** Disputes, evidence review, correction/void flows, moderation audit history, and complete member read-only views remain queued product work.
+3. **Closed — leader/moderator operations.** Challenge lifecycle enforcement, participant disputes, evidence review, correction/void flows, rating reversal, moderation audit history, scoped capabilities, and member read-only views are implemented with service and plugin coverage.
 
 ## Release decision
 
