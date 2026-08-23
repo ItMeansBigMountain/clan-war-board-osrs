@@ -12,7 +12,7 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 - Real zero-state exists in API, website counters/copy, plugin collections, and tests. Live production currently has one real plugin-registered clan and no rated fights.
 - CWA is primary; CWA and Wildy terms, records, and ratings are separate.
 - Every completed-fight website detail includes the replay canvas and honest no-events/no-position states.
-- Java 11 `clean test assemble` passed. Service unit suite passed. Live health, clans, both leaderboard modes, and website replay/zero-state/dual-mode markup were probed.
+- Java 11 `clean test assemble` passed. All 35 service unit tests and both Playwright replay tests passed against the reconciled source. The earlier live health, clans, leaderboard, replay, zero-state, and dual-mode probes predate these unpublished commits and must be repeated after deployment.
 
 ## Fixed in this audit slice
 
@@ -23,12 +23,18 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 
 ## Remaining release blockers
 
-1. **Critical — server leader authority is still self-asserted.** `/api/plugin/register` is unauthenticated and grants `leader:write` solely from client-submitted `clanRank`. Local live-rank rechecks are good client safety, but the server capability is not an independent authority. Before Plugin Hub submission, add a real clan-claim/leader-verification mechanism or restrict leader writes to a clearly community-trust beta environment.
-2. **High — accepted-roster snapshots are not implemented.** The service does not persist immutable rosters for both clans at mutual acceptance, so it cannot distinguish an accepted rival member from an outsider. Current output deliberately says `outsider_or_unverified`; it must not claim definitive outsider attribution until roster snapshots exist.
-3. **High — plugin network/lifecycle coverage is incomplete.** Java tests cover pure helpers and state predicates but not the required MockWebServer matrix: malformed/empty/reordered JSON, delayed A→B→A responses, telemetry opt-out after drain, request capture by privacy state, executor rejection, and retry cleanup.
-4. **Medium — replay UI lacks automated browser behavior coverage.** Service aggregation tests cover replay data and empty data, but no browser test exercises play/pause, scrub, no-position events, or mode-specific completed-fight rendering.
-5. **Medium — dual rankings are schema-only today.** The live API separates CWA/Wildy fields, but both are unrated and no versioned rating-update pipeline applies completed verified results yet.
+1. **Closed in the authority/roster slice — server leader authority no longer trusts client rank alone.** `/api/plugin/register` now issues leader writes only to server-verified leader installations; submitted `clanRank` remains local/client evidence but is not sufficient for `leader:write` or `challenge:write`.
+2. **Closed in the authority/roster slice — accepted-roster snapshots are immutable at confirmation.** The plugin submits the private RuneLite primary-clan roster during registration; the service snapshots both clans' hashed rosters at mutual acceptance and uses those snapshots for rival-vs-outsider classification.
+3. **Closed in the network/lifecycle coverage slice — plugin network and async regressions now have Java coverage.** MockWebServer tests exercise reordered board JSON, malformed/empty API responses, generation-safe delayed A→B→A behavior, privacy-specific registration and telemetry request bodies, telemetry opt-out discard behavior after drain, and executor rejection cleanup.
+4. **Closed in the browser replay coverage slice — replay UI now has automated browser coverage.** Playwright tests exercise completed-fight replay play, pause, scrub, no-position event rendering, and mode-specific completed-fight terms using routed fixture API responses.
+5. **Closed in the dual-rating slice — verified results now drive separate versioned ratings.** `rating.v1` applies Elo independently per CWA/Wildy mode only after mutual acceptance, immutable roster snapshots, sufficient telemetry confidence, and a non-disputed result. Every applied update persists its exact inputs, algorithm, before/after ratings, and deltas; the public audit route exposes those records.
+
+## Remaining release work
+
+1. **Deploy and probe the reconciled service commit.** The local source and suites are green, but the authority, roster, rating, and replay changes must be deployed before live behavior can be claimed.
+2. **Complete independent security and abuse review.** Server-issued authority, session persistence/rotation, roster snapshots, rating completion, telemetry consent, replay sanitization, and rate limits still require the queued red-team pass.
+3. **Complete leader/moderator operations.** Disputes, evidence review, correction/void flows, moderation audit history, and complete member read-only views remain queued product work.
 
 ## Release decision
 
-Not ready for a Plugin Hub PR. Keep this repository in `in-progress`. The open Who's Grinding submission also blocks opening another Plugin Hub PR by the user-approved queue rule.
+Not ready for a Plugin Hub PR. Keep this repository in `in-progress` until deployment probes and the queued security/moderation work pass. The open Who's Grinding submission also blocks opening another Plugin Hub PR by the user-approved queue rule.

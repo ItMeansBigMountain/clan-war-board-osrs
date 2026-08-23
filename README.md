@@ -42,6 +42,8 @@ RuneLite settings intentionally contain only:
 - `Leader Rank Needed`
 - `Share War Telemetry` — optional and disabled by default. When disabled, no combat/location heartbeat or fight telemetry is queued or uploaded.
 - `Show My Player Stats Publicly`
+- `Show Clan & ELO Overheads` — optional and disabled by default. Shows only server-published members above nearby players; private/unregistered names are never inferred or rendered.
+- `Overhead Rating Mode` — selects the separate CWA or Wildy clan rating shown by the overhead.
 - `Show Login Message`
 
 War creation, opponents, dates, worlds, locations, and rules belong inside the panel workflow. The production service URL is pinned in code and is not user-configurable.
@@ -59,7 +61,7 @@ The plugin talks only to the pinned HTTPS origin `https://salmon-dune-01c80c60f.
 
 | Method and route | Purpose / authorization |
 | --- | --- |
-| `GET /api/health`, `GET /api/clans`, `GET /api/public/availability`, `GET /api/fight-modes` | Public service health, dual-rank clan profiles, board state, and CWA/Wildy schemas. |
+| `GET /api/health`, `GET /api/clans`, `GET /api/clans/{id}`, `GET /api/public/availability`, `GET /api/fight-modes` | Public service health, privacy-filtered registered members, dual-rank clan profiles, board state, and CWA/Wildy schemas. Clan profiles are read for the optional overhead cache. |
 | `POST /api/plugin/register` | Sends installation UUID, player/clan names, observed rank, plugin version, and public-stats preference; returns a one-hour bearer session and capabilities. |
 | `POST /api/plugin/session/rotate` | `member:read`; revokes/replaces the current session. |
 | `GET /api/plugin/me/metrics` | `member:read`; returns owner-only aggregates and recent confirmed-fight events. |
@@ -113,6 +115,7 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 18. Confirm a failed refresh after changing identity cannot restore the previous identity's cached board or session.
 19. Confirm disabled telemetry produces no heartbeat, combat event, queue growth, batch request, or retry; turning it off clears an existing buffer immediately.
 20. Confirm the mode button starts on CWA, switches to Wildy without overflow, and sends distinct `mode`/`returnsAllowed` terms.
+21. Confirm player overheads are absent by default; when enabled, only public registered members render, and switching the configured mode changes CWA/Wildy rating without mixing them.
 
 ## CWA research and scoring design
 

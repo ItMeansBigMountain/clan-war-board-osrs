@@ -29,12 +29,21 @@ final class ClanWarBoardApiClient
 
 	private final OkHttpClient httpClient;
 	private final Gson gson;
+	private final String serviceUrl;
 
 	@Inject
 	ClanWarBoardApiClient(OkHttpClient httpClient, Gson gson)
 	{
+		this(httpClient, gson, DEFAULT_SERVICE_URL);
+	}
+
+	ClanWarBoardApiClient(OkHttpClient httpClient, Gson gson, String serviceUrl)
+	{
 		this.httpClient = httpClient;
 		this.gson = gson;
+		this.serviceUrl = serviceUrl == null || serviceUrl.trim().isEmpty()
+			? DEFAULT_SERVICE_URL
+			: serviceUrl.replaceAll("/$", "");
 	}
 
 	ClanWarBoardState fetchBoardState(String clanName, int clanMemberCount, ClanWarBoardSession session) throws IOException
@@ -95,11 +104,94 @@ final class ClanWarBoardApiClient
 
 	ClanWarBoardSession register(String installId, ClanAccess access, String pluginVersion, boolean publicStats) throws IOException
 	{
+		return register(installId, access, pluginVersion, publicStats, Collections.emptyList());
+	}
+
+	ClanWarBoardSession register(String installId, ClanAccess access, String pluginVersion, boolean publicStats, List<String> rosterMembers) throws IOException
+	{
 		if (access == null || access.getClanName() == null || access.getClanName().trim().isEmpty())
 		{
 			throw new IOException("Clan membership is required before registration");
 		}
-		return parseSessionResponse(post("/api/plugin/register", registrationJson(installId, access, pluginVersion, publicStats), Collections.emptyMap()));
+		return parseSessionResponse(post("/api/plugin/register", registrationJson(installId, access, pluginVersion, publicStats, rosterMembers), Collections.emptyMap()));
+	}
+
+	Map<String, NearbyPlayerProfile> fetchPublicPlayerProfiles() throws IOException
+	{
+		String clansJson = get("/api/clans");
+		JsonObject root = gson.fromJson(clansJson, JsonObject.class);
+		if (root == null || !root.has("clans") || !root.get("clans").isJsonArray())
+		{
+			throw new IOException("Clan War Board clans response is malformed");
+		}
+		Map<String, String> profileJsonByClanId = new LinkedHashMap<>();
+		for (JsonElement element : root.getAsJsonArray("clans"))
+		{
+			String clanId = string(element.getAsJsonObject(), "clan_id");
+			if (!clanId.isEmpty() && clanId.matches("[a-z0-9-]+"))
+			{
+				profileJsonByClanId.put(clanId, get("/api/clans/" + clanId));
+			}
+		}
+		return parsePublicPlayerProfiles(clansJson, profileJsonByClanId);
+	}
+
+	static Map<String, NearbyPlayerProfile> parsePublicPlayerProfiles(String clansJson, Map<String, String> profileJsonByClanId)
+	{
+		JsonObject root = new Gson().fromJson(clansJson, JsonObject.class);
+		if (root == null || !root.has("clans") || !root.get("clans").isJsonArray())
+		{
+			throw new IllegalArgumentException("Clan response is missing clans");
+		}
+		Map<String, NearbyPlayerProfile> profiles = new LinkedHashMap<>();
+		for (JsonElement element : root.getAsJsonArray("clans"))
+		{
+			String clanId = string(element.getAsJsonObject(), "clan_id");
+			String profileJson = profileJsonByClanId == null ? null : profileJsonByClanId.get(clanId);
+			if (profileJson == null)
+			{
+				continue;
+			}
+			JsonObject profile = new Gson().fromJson(profileJson, JsonObject.class);
+			if (profile == null || !profile.has("members") || !profile.get("members").isJsonArray())
+			{
+				continue;
+			}
+			String clanName = string(profile, "clan_name");
+			JsonObject rankings = profile.has("rankings") && profile.get("rankings").isJsonObject()
+				? profile.getAsJsonObject("rankings") : new JsonObject();
+			Integer cwa = publicRating(rankings, "cwa");
+			Integer wildy = publicRating(rankings, "wildy");
+			for (JsonElement memberElement : profile.getAsJsonArray("members"))
+			{
+				JsonObject member = memberElement.getAsJsonObject();
+				if (member.has("public") && member.get("public").getAsBoolean())
+				{
+					String playerName = normalizePlayerName(string(member, "displayName"));
+					if (!playerName.isEmpty())
+					{
+						profiles.put(playerName, new NearbyPlayerProfile(clanName, cwa, wildy));
+					}
+				}
+			}
+		}
+		return Collections.unmodifiableMap(profiles);
+	}
+
+	private static Integer publicRating(JsonObject rankings, String mode)
+	{
+		if (!rankings.has(mode) || !rankings.get(mode).isJsonObject())
+		{
+			return null;
+		}
+		JsonObject rating = rankings.getAsJsonObject(mode);
+		return "rated".equalsIgnoreCase(string(rating, "status")) && rating.has("rating") && !rating.get("rating").isJsonNull()
+			? rating.get("rating").getAsInt() : null;
+	}
+
+	static String normalizePlayerName(String value)
+	{
+		return value == null ? "" : value.trim().toLowerCase().replace('_', ' ').replaceAll("\\s+", " ");
 	}
 
 	ClanWarBoardSession rotateSession(ClanWarBoardSession session) throws IOException
@@ -220,12 +312,32 @@ final class ClanWarBoardApiClient
 
 	static String registrationJson(String installId, ClanAccess access, String pluginVersion, boolean publicStats)
 	{
+		return registrationJson(installId, access, pluginVersion, publicStats, Collections.emptyList());
+	}
+
+	static String registrationJson(String installId, ClanAccess access, String pluginVersion, boolean publicStats, List<String> rosterMembers)
+	{
+		StringBuilder roster = new StringBuilder();
+		for (String member : rosterMembers == null ? Collections.<String>emptyList() : rosterMembers)
+		{
+			String name = member == null ? "" : member.trim();
+			if (name.isEmpty())
+			{
+				continue;
+			}
+			if (roster.length() > 0)
+			{
+				roster.append(',');
+			}
+			roster.append("\"").append(jsonEscape(name)).append("\"");
+		}
 		return "{\"installId\":\"" + jsonEscape(installId) +
 			"\",\"playerName\":\"" + jsonEscape(access.getPlayerName()) +
 			"\",\"clanName\":\"" + jsonEscape(access.getClanName()) +
 			"\",\"clanRank\":" + access.getRankValue() +
 			",\"pluginVersion\":\"" + jsonEscape(pluginVersion) +
-			"\",\"publicStats\":" + publicStats + "}";
+			"\",\"publicStats\":" + publicStats +
+			",\"rosterMembers\":[" + roster + "]}";
 	}
 
 	static Map<String, String> authenticatedHeaders(String token)
@@ -283,7 +395,7 @@ final class ClanWarBoardApiClient
 	private String get(String path, Map<String, String> headers) throws IOException
 	{
 		Request.Builder builder = new Request.Builder()
-			.url(DEFAULT_SERVICE_URL + path)
+			.url(serviceUrl + path)
 			.header("Accept", "application/json")
 			.header("User-Agent", USER_AGENT)
 			.header("X-Clan-War-Board-Client", "runelite");
@@ -294,7 +406,7 @@ final class ClanWarBoardApiClient
 	private String post(String path, String json, Map<String, String> headers) throws IOException
 	{
 		Request.Builder builder = new Request.Builder()
-			.url(DEFAULT_SERVICE_URL + path)
+			.url(serviceUrl + path)
 			.header("Accept", "application/json")
 			.header("User-Agent", USER_AGENT)
 			.header("X-Clan-War-Board-Client", "runelite")

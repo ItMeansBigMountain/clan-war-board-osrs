@@ -3,14 +3,22 @@ package com.itmeansbigmountain.clanwarboard;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.google.gson.Gson;
+import java.io.IOException;
 import java.util.Map;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.awt.image.BufferedImage;
 import java.awt.Component;
@@ -22,6 +30,10 @@ import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 import net.runelite.client.plugins.PluginDescriptor;
+import okhttp3.OkHttpClient;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.Test;
 
 public class ClanWarBoardPluginTest
@@ -46,6 +58,8 @@ public class ClanWarBoardPluginTest
 		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
 		assertFalse(config.shareWarTelemetry());
 		assertFalse(config.publicPlayerTracking());
+		assertFalse(config.showPlayerOverheads());
+		assertEquals(FightMode.CWA, config.overheadRatingMode());
 		assertTrue(config.showLoginMessage());
 		Set<String> methodNames = java.util.Arrays.stream(ClanWarBoardConfig.class.getMethods())
 			.map(java.lang.reflect.Method::getName)
@@ -58,6 +72,31 @@ public class ClanWarBoardPluginTest
 		assertFalse(methodNames.contains("warWorld"));
 		assertFalse(methodNames.contains("hotspot"));
 		assertFalse(methodNames.contains("rules"));
+	}
+
+	@Test
+	public void publicOverheadProfilesExcludePrivateMembersAndKeepModeRatingsSeparate()
+	{
+		String clans = "{\"clans\":[{\"clan_id\":\"rs-venom\"}]}";
+		Map<String, String> profiles = Collections.singletonMap("rs-venom",
+			"{\"clan_name\":\"Rs Venom\",\"members\":[" +
+				"{\"displayName\":\"Oyama\",\"public\":true}," +
+				"{\"displayName\":\"Hidden\",\"public\":false}]," +
+				"\"rankings\":{\"cwa\":{\"rating\":1542,\"status\":\"rated\"}," +
+				"\"wildy\":{\"rating\":1398,\"status\":\"rated\"}}}");
+
+		Map<String, NearbyPlayerProfile> parsed = ClanWarBoardApiClient.parsePublicPlayerProfiles(clans, profiles);
+		assertEquals(1, parsed.size());
+		assertFalse(parsed.containsKey("hidden"));
+		assertEquals("Rs Venom · CWA 1542", parsed.get("oyama").overheadText(FightMode.CWA));
+		assertEquals("Rs Venom · Wildy 1398", parsed.get("oyama").overheadText(FightMode.WILDY));
+	}
+
+	@Test
+	public void unratedOverheadNeverInventsAnElo()
+	{
+		NearbyPlayerProfile profile = new NearbyPlayerProfile("Rs Venom", null, null);
+		assertEquals("Rs Venom · CWA unrated", profile.overheadText(FightMode.CWA));
 	}
 
 	@Test
@@ -272,6 +311,17 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
+	public void registrationPayloadIncludesPrivateRosterSnapshotWithoutLeaderSecrets()
+	{
+		String json = ClanWarBoardApiClient.registrationJson("11111111-1111-4111-8111-111111111111",
+			new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", false,
+			java.util.Arrays.asList("Oyama", "Deputy", "Member\\\"Name"));
+		assertTrue(json.contains("\"rosterMembers\":[\"Oyama\",\"Deputy\",\"Member\\\\\\\"Name\"]"));
+		assertFalse(json.contains("leaderClaim"));
+		assertFalse(json.contains("secret"));
+	}
+
+	@Test
 	public void apiClientHelpersAreStable()
 	{
 		assertTrue(ClanWarBoardApiClient.DEFAULT_SERVICE_URL.startsWith("https://"));
@@ -392,6 +442,168 @@ public class ClanWarBoardPluginTest
 		assertTrue(cwa.contains("\"returnsAllowed\":false"));
 		assertTrue(wildy.contains("\"mode\":\"wildy\""));
 		assertTrue(wildy.contains("\"returnsAllowed\":true"));
+	}
+
+	@Test
+	public void mockWebServerAcceptsReorderedAvailabilityAndRejectsMalformedOrEmptyResponses() throws Exception
+	{
+		try (MockWebServer server = new MockWebServer())
+		{
+			server.start();
+			ClanWarBoardApiClient client = testApiClient(server);
+			enqueueBoard(server, clans("trapistan", 11), "{\"history\":[" + fight("done", "completed", "wildy") + "],\"scheduled\":[" + fight("next", "scheduled", "cwa") + "],\"availability\":[" + fight("open", "open", "cwa") + "]}", metrics());
+
+			ClanWarBoardState state = client.fetchBoardState("TRAPISTAN", 60, testSession());
+
+			assertEquals(11, state.getInstalledMembers());
+			assertEquals("open", state.getAvailable().get(0).getId());
+			assertEquals("next", state.getScheduled().get(0).getId());
+			assertEquals(FightMode.WILDY, state.getHistory().get(0).getMode());
+		}
+
+		assertFetchFails("{\"ok\":true}", "", "{\"availability\":[],\"scheduled\":[],\"history\":[]}", "malformed");
+		assertFetchFails("", clans("trapistan", 11), "{\"availability\":[],\"scheduled\":[],\"history\":[]}", "ok");
+		assertFetchFails("{\"ok\":true}", clans("trapistan", 11), "{\"scheduled\":[],\"history\":[]}", "malformed");
+	}
+
+	@Test
+	public void mockWebServerDelayedAbaResponsesKeepGenerationAndContextHonest() throws Exception
+	{
+		try (MockWebServer server = new MockWebServer())
+		{
+			server.start();
+			enqueueBoard(server, clans("trapistan", 7), "{\"availability\":[],\"scheduled\":[],\"history\":[]}", metrics());
+			ClanWarBoardState state = testApiClient(server).fetchBoardState("TRAPISTAN", 50, testSession());
+
+			ClanWarBoardState delayedA = ClanWarBoardPlugin.failureState(state, "Oyama|TRAPISTAN", 1L, "Oyama|TRAPISTAN", 3L, "delayed stale A response");
+
+			assertTrue(delayedA.getAvailable().isEmpty());
+			assertEquals(0, delayedA.getInstalledMembers());
+			assertFalse(ClanWarBoardPlugin.isIdentityCurrent("Oyama|TRAPISTAN", 1L, "Oyama|TRAPISTAN", 3L));
+		}
+	}
+
+	@Test
+	public void mockWebServerCapturesRegistrationPrivacyAndTelemetryOptOutRequestShapes() throws Exception
+	{
+		try (MockWebServer server = new MockWebServer())
+		{
+			server.start();
+			ClanWarBoardApiClient client = testApiClient(server);
+			server.enqueue(jsonResponse(sessionJson("private-token")));
+			server.enqueue(jsonResponse(sessionJson("public-token")));
+			server.enqueue(jsonResponse("{\"accepted\":true}"));
+
+			client.register("install-private", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", false);
+			client.register("install-public", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", true);
+			client.submitTelemetry(testSession(), Collections.singletonList(new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy", 31, 330, 123, 456L, false)));
+
+			RecordedRequest privateRegistration = server.takeRequest(1, TimeUnit.SECONDS);
+			RecordedRequest publicRegistration = server.takeRequest(1, TimeUnit.SECONDS);
+			RecordedRequest telemetry = server.takeRequest(1, TimeUnit.SECONDS);
+			assertTrue(privateRegistration.getBody().readUtf8().contains("\"publicStats\":false"));
+			assertTrue(publicRegistration.getBody().readUtf8().contains("\"publicStats\":true"));
+			String telemetryBody = telemetry.getBody().readUtf8();
+			assertTrue(telemetryBody.contains("\"playerName\":\"private\""));
+			assertFalse(telemetryBody.contains("Oyama"));
+			assertEquals("Bearer token", telemetry.getHeader("Authorization"));
+		}
+
+		ClanWarBoardTelemetryBuffer buffer = new ClanWarBoardTelemetryBuffer();
+		buffer.add(new ClanWarBoardTelemetryEvent("heartbeat", "Oyama", "TRAPISTAN", null, 0, 330, 1, 1, false));
+		List<ClanWarBoardTelemetryEvent> drained = buffer.drain(20_000L);
+		assertEquals(1, drained.size());
+		buffer.clear();
+		assertEquals(0, buffer.size());
+	}
+
+	@Test
+	public void rejectedExecutorRunsCleanupWithoutLeakingInFlightState()
+	{
+		AtomicBoolean cleaned = new AtomicBoolean(false);
+		RejectingExecutor executor = new RejectingExecutor();
+
+		assertFalse(ClanWarBoardPlugin.submitAsync(executor, () -> fail("rejected task must not run"), () -> cleaned.set(true)));
+
+		assertTrue(cleaned.get());
+		executor.shutdownNow();
+	}
+
+	private static ClanWarBoardApiClient testApiClient(MockWebServer server)
+	{
+		return new ClanWarBoardApiClient(new OkHttpClient(), new Gson(), server.url("").toString().replaceAll("/$", ""));
+	}
+
+	private static void enqueueBoard(MockWebServer server, String clans, String availability, String metrics)
+	{
+		server.enqueue(jsonResponse("{\"ok\":true}"));
+		server.enqueue(jsonResponse(clans));
+		server.enqueue(jsonResponse(availability));
+		server.enqueue(jsonResponse(metrics));
+	}
+
+	private static void assertFetchFails(String health, String clans, String availability, String expectedMessage) throws Exception
+	{
+		try (MockWebServer server = new MockWebServer())
+		{
+			server.start();
+			server.enqueue(jsonResponse(health));
+			server.enqueue(jsonResponse(clans));
+			server.enqueue(jsonResponse(availability));
+			try
+			{
+				testApiClient(server).fetchBoardState("TRAPISTAN", 60, null);
+				fail("Expected malformed response to fail");
+			}
+			catch (IOException ex)
+			{
+				assertTrue(ex.getMessage().toLowerCase().contains(expectedMessage));
+			}
+		}
+	}
+
+	private static MockResponse jsonResponse(String body)
+	{
+		return new MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody(body);
+	}
+
+	private static String clans(String clanId, int memberCount)
+	{
+		return "{\"clans\":[{\"clan_id\":\"" + clanId + "\",\"member_count\":" + memberCount + "}]}";
+	}
+
+	private static String fight(String id, String status, String mode)
+	{
+		return "{\"id\":\"" + id + "\",\"creatorClanId\":\"trapistan\",\"opponentClanId\":\"rivals\",\"startsAt\":\"2026-08-20T20:00:00Z\",\"durationMinutes\":30,\"combatMin\":70,\"combatMax\":126,\"notes\":\"terms\",\"status\":\"" + status + "\",\"mode\":\"" + mode + "\"}";
+	}
+
+	private static String metrics()
+	{
+		return "{\"metrics\":{\"eventsTracked\":3}}";
+	}
+
+	private static String sessionJson(String token)
+	{
+		return "{\"sessionToken\":\"" + token + "\",\"expiresAt\":\"2026-08-20T20:00:00+00:00\",\"capabilities\":[\"member:read\",\"leader:write\"]}";
+	}
+
+	private static ClanWarBoardSession testSession()
+	{
+		return new ClanWarBoardSession("token", Instant.now().plusSeconds(600), Collections.singleton("leader:write"));
+	}
+
+	private static final class RejectingExecutor extends ScheduledThreadPoolExecutor
+	{
+		RejectingExecutor()
+		{
+			super(1);
+		}
+
+		@Override
+		public Future<?> submit(Runnable task)
+		{
+			throw new RejectedExecutionException("executor is shut down");
+		}
 	}
 
 	public static void main(String[] args) throws Exception

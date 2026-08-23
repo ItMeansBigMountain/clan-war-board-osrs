@@ -6,8 +6,12 @@ import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -15,7 +19,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
@@ -39,9 +42,11 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.ColorUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-@Slf4j
 @PluginDescriptor(
 	name = ClanWarBoardPlugin.PLUGIN_NAME,
 	description = "Sets up CWA and Wilderness clan fights with rankings and post-fight analysis.",
@@ -49,6 +54,7 @@ import net.runelite.client.util.ColorUtil;
 )
 public class ClanWarBoardPlugin extends Plugin
 {
+	private static final Logger log = LoggerFactory.getLogger(ClanWarBoardPlugin.class);
 	static final String PLUGIN_NAME = "Clan War Board";
 	static final String PLUGIN_VERSION = "1.0.0";
 	static final long AUTO_REFRESH_SECONDS = 60L;
@@ -75,6 +81,12 @@ public class ClanWarBoardPlugin extends Plugin
 	@Inject
 	private ClientThread clientThread;
 
+	@Inject
+	private OverlayManager overlayManager;
+
+	@Inject
+	private ClanWarBoardPlayerOverlay playerOverlay;
+
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
 	private ScheduledFuture<?> autoRefreshTask;
@@ -90,6 +102,7 @@ public class ClanWarBoardPlugin extends Plugin
 	private volatile long identityGeneration;
 	private volatile boolean running;
 	private volatile boolean telemetrySharingEnabled;
+	private volatile Map<String, NearbyPlayerProfile> publicPlayerProfiles = Collections.emptyMap();
 	private volatile ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
 	private volatile String boardStateContext = "|";
 	private volatile long boardStateGeneration;
@@ -140,6 +153,7 @@ public class ClanWarBoardPlugin extends Plugin
 			.panel(panel)
 			.build();
 		clientToolbar.addNavigation(navButton);
+		overlayManager.add(playerOverlay);
 		refreshPanel();
 		refreshOnlineBoard();
 		autoRefreshTask = executorService.scheduleWithFixedDelay(
@@ -167,6 +181,8 @@ public class ClanWarBoardPlugin extends Plugin
 		boardStateGeneration = 0L;
 		telemetryBuffer.clear();
 		combatSignals.reset();
+		publicPlayerProfiles = Collections.emptyMap();
+		overlayManager.remove(playerOverlay);
 		clientToolbar.removeNavigation(navButton);
 		navButton = null;
 		panel = null;
@@ -202,8 +218,12 @@ public class ClanWarBoardPlugin extends Plugin
 				telemetryBuffer.clear();
 				combatSignals.reset();
 			}
+			if (!config.showPlayerOverheads())
+			{
+				publicPlayerProfiles = Collections.emptyMap();
+			}
 			refreshPanel();
-			if ("publicPlayerTracking".equals(event.getKey()))
+			if ("publicPlayerTracking".equals(event.getKey()) || "showPlayerOverheads".equals(event.getKey()))
 			{
 				refreshOnlineBoard();
 			}
@@ -349,26 +369,39 @@ public class ClanWarBoardPlugin extends Plugin
 		long previousStateGeneration = boardStateGeneration;
 		int currentClanMemberCount = clanMemberCount();
 		String installationId = installationId();
-		executorService.submit(() ->
+		List<String> rosterMembers = clanRosterMembers();
+		boolean loadPlayerOverheads = config.showPlayerOverheads();
+		Map<String, NearbyPlayerProfile> previousProfiles = publicPlayerProfiles;
+		submitAsync(executorService, () ->
 		{
 			ClanWarBoardState completedState;
 			ClanWarBoardSession refreshedSession = null;
+			Map<String, NearbyPlayerProfile> completedProfiles = Collections.emptyMap();
 			try
 			{
 				if (registrationAccess.getClanName() != null && !registrationAccess.getClanName().trim().isEmpty())
 				{
-					refreshedSession = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking());
+					refreshedSession = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking(), rosterMembers);
 				}
 				completedState = apiClient.fetchBoardState(registrationAccess.getClanName(), currentClanMemberCount, refreshedSession);
+				if (loadPlayerOverheads)
+				{
+					completedProfiles = apiClient.fetchPublicPlayerProfiles();
+				}
 			}
 			catch (IOException ex)
 			{
 				log.debug("Clan War Board API refresh failed", ex);
 				completedState = failureState(previousState, previousStateContext, previousStateGeneration,
 					refreshContext, refreshGeneration, ex.getMessage());
+				if (loadPlayerOverheads && isIdentityCurrent(previousStateContext, previousStateGeneration, refreshContext, refreshGeneration))
+				{
+					completedProfiles = previousProfiles;
+				}
 			}
 			ClanWarBoardState refreshedState = completedState;
 			ClanWarBoardSession completedSession = refreshedSession;
+			Map<String, NearbyPlayerProfile> refreshedProfiles = completedProfiles;
 			clientThread.invoke(() ->
 			{
 				boolean contextCurrent = isIdentityCurrent(refreshContext, refreshGeneration,
@@ -383,6 +416,7 @@ public class ClanWarBoardPlugin extends Plugin
 						boardState = refreshedState;
 						boardStateContext = refreshContext;
 						boardStateGeneration = refreshGeneration;
+						publicPlayerProfiles = loadPlayerOverheads ? refreshedProfiles : Collections.emptyMap();
 						if (loginMessagePending)
 						{
 							loginMessagePending = false;
@@ -401,6 +435,10 @@ public class ClanWarBoardPlugin extends Plugin
 					}
 				}
 			});
+		}, () ->
+		{
+			boardRefreshInFlight.set(false);
+			setPanelReloading(false);
 		});
 	}
 
@@ -426,6 +464,12 @@ public class ClanWarBoardPlugin extends Plugin
 		boardState = ClanWarBoardState.offline("Waiting for this clan's service refresh");
 		boardStateContext = normalized;
 		boardStateGeneration = identityGeneration;
+		publicPlayerProfiles = Collections.emptyMap();
+	}
+
+	NearbyPlayerProfile publicProfile(String playerName)
+	{
+		return publicPlayerProfiles.get(ClanWarBoardApiClient.normalizePlayerName(playerName));
 	}
 
 	static boolean isRefreshContextCurrent(String expected, String current)
@@ -459,6 +503,24 @@ public class ClanWarBoardPlugin extends Plugin
 		return inFlight != null && inFlight.compareAndSet(false, true);
 	}
 
+	static boolean submitAsync(ScheduledExecutorService executor, Runnable task, Runnable rejectionCleanup)
+	{
+		try
+		{
+			executor.submit(task);
+			return true;
+		}
+		catch (RejectedExecutionException ex)
+		{
+			if (rejectionCleanup != null)
+			{
+				rejectionCleanup.run();
+			}
+			log.debug("Clan War Board executor rejected async work", ex);
+			return false;
+		}
+	}
+
 	private void setPanelReloading(boolean reloading)
 	{
 		SwingUtilities.invokeLater(() ->
@@ -480,7 +542,7 @@ public class ClanWarBoardPlugin extends Plugin
 		{
 			return;
 		}
-		executorService.submit(() ->
+		submitAsync(executorService, () ->
 		{
 			try
 			{
@@ -504,7 +566,7 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				sessionRefreshInFlight.set(false);
 			}
-		});
+		}, () -> sessionRefreshInFlight.set(false));
 	}
 
 	private void submitAvailability(String startsAt, String duration, String combatMin, String combatMax, String notes)
@@ -534,7 +596,7 @@ public class ClanWarBoardPlugin extends Plugin
 				matchActionInFlight.set(false);
 				return;
 			}
-			executorService.submit(() ->
+			submitAsync(executorService, () ->
 			{
 				try
 				{
@@ -549,7 +611,7 @@ public class ClanWarBoardPlugin extends Plugin
 				{
 					matchActionInFlight.set(false);
 				}
-			});
+			}, () -> matchActionInFlight.set(false));
 		});
 	}
 
@@ -580,7 +642,7 @@ public class ClanWarBoardPlugin extends Plugin
 				matchActionInFlight.set(false);
 				return;
 			}
-			executorService.submit(() ->
+			submitAsync(executorService, () ->
 			{
 				try
 				{
@@ -595,7 +657,7 @@ public class ClanWarBoardPlugin extends Plugin
 				{
 					matchActionInFlight.set(false);
 				}
-			});
+			}, () -> matchActionInFlight.set(false));
 		});
 	}
 
@@ -757,7 +819,7 @@ public class ClanWarBoardPlugin extends Plugin
 		{
 			return;
 		}
-		executorService.submit(() ->
+		submitAsync(executorService, () ->
 		{
 			if (!telemetrySharingEnabled
 				|| !isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
@@ -782,6 +844,14 @@ public class ClanWarBoardPlugin extends Plugin
 				{
 					log.debug("Clan War Board telemetry upload failed after identity changed; batch discarded", ex);
 				}
+			}
+		}, () ->
+		{
+			if (telemetrySharingEnabled
+				&& isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
+				&& isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
+			{
+				telemetryBuffer.requeue(batch);
 			}
 		});
 	}
@@ -826,6 +896,24 @@ public class ClanWarBoardPlugin extends Plugin
 	{
 		ClanSettings settings = client.getClanSettings();
 		return settings == null || settings.getMembers() == null ? 0 : settings.getMembers().size();
+	}
+
+	private List<String> clanRosterMembers()
+	{
+		List<String> names = new ArrayList<>();
+		ClanSettings settings = client.getClanSettings();
+		if (settings == null || settings.getMembers() == null)
+		{
+			return names;
+		}
+		for (ClanMember member : settings.getMembers())
+		{
+			if (member != null && member.getName() != null && !member.getName().trim().isEmpty())
+			{
+				names.add(member.getName());
+			}
+		}
+		return names;
 	}
 
 	private String installationId()

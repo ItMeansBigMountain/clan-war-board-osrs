@@ -43,10 +43,32 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "showPlayerOverheads",
+		name = "Show Clan & ELO Overheads",
+		description = "Optionally show public Clan War Board clan and rating data above nearby registered players",
+		position = 3
+	)
+	default boolean showPlayerOverheads()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "overheadRatingMode",
+		name = "Overhead Rating Mode",
+		description = "Choose which separate Clan War Board rating appears in overheads",
+		position = 4
+	)
+	default FightMode overheadRatingMode()
+	{
+		return FightMode.CWA;
+	}
+
+	@ConfigItem(
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
 		description = "Show available-fight and next-war information after logging in",
-		position = 3
+		position = 5
 	)
 	default boolean showLoginMessage()
 	{
