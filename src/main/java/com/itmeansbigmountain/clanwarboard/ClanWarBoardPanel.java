@@ -472,7 +472,7 @@ class ClanWarBoardPanel extends PluginPanel
 		}
 		addCard("How it works", new String[] {
 			"Leave opponent blank to publish an open " + mode.getShortLabel() + " post.",
-			mode == FightMode.CWA ? "No returns: damage, tanking, binds and pile work matter." : "Returns and location control count in Wildy."
+			mode == FightMode.CWA ? "No returns: leaders enter terms and confirm the clan result." : "Returns allowed: leaders enter terms and confirm the clan result."
 		}, ACCENT);
 		JLabel formError = wrapped("", 11, new Color(235, 135, 115));
 		formError.setVisible(false);
