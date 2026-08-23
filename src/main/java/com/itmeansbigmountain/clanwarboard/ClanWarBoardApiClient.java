@@ -102,96 +102,13 @@ final class ClanWarBoardApiClient
 			integer(metrics, "activitySamples"), integer(metrics, "eventsTracked"));
 	}
 
-	ClanWarBoardSession register(String installId, ClanAccess access, String pluginVersion, boolean publicStats) throws IOException
-	{
-		return register(installId, access, pluginVersion, publicStats, Collections.emptyList());
-	}
-
-	ClanWarBoardSession register(String installId, ClanAccess access, String pluginVersion, boolean publicStats, List<String> rosterMembers) throws IOException
+	ClanWarBoardSession register(String installId, ClanAccess access, String pluginVersion) throws IOException
 	{
 		if (access == null || access.getClanName() == null || access.getClanName().trim().isEmpty())
 		{
 			throw new IOException("Clan membership is required before registration");
 		}
-		return parseSessionResponse(post("/api/plugin/register", registrationJson(installId, access, pluginVersion, publicStats, rosterMembers), Collections.emptyMap()));
-	}
-
-	Map<String, NearbyPlayerProfile> fetchPublicPlayerProfiles() throws IOException
-	{
-		String clansJson = get("/api/clans");
-		JsonObject root = gson.fromJson(clansJson, JsonObject.class);
-		if (root == null || !root.has("clans") || !root.get("clans").isJsonArray())
-		{
-			throw new IOException("Clan War Board clans response is malformed");
-		}
-		Map<String, String> profileJsonByClanId = new LinkedHashMap<>();
-		for (JsonElement element : root.getAsJsonArray("clans"))
-		{
-			String clanId = string(element.getAsJsonObject(), "clan_id");
-			if (!clanId.isEmpty() && clanId.matches("[a-z0-9-]+"))
-			{
-				profileJsonByClanId.put(clanId, get("/api/clans/" + clanId));
-			}
-		}
-		return parsePublicPlayerProfiles(clansJson, profileJsonByClanId);
-	}
-
-	static Map<String, NearbyPlayerProfile> parsePublicPlayerProfiles(String clansJson, Map<String, String> profileJsonByClanId)
-	{
-		JsonObject root = new Gson().fromJson(clansJson, JsonObject.class);
-		if (root == null || !root.has("clans") || !root.get("clans").isJsonArray())
-		{
-			throw new IllegalArgumentException("Clan response is missing clans");
-		}
-		Map<String, NearbyPlayerProfile> profiles = new LinkedHashMap<>();
-		for (JsonElement element : root.getAsJsonArray("clans"))
-		{
-			String clanId = string(element.getAsJsonObject(), "clan_id");
-			String profileJson = profileJsonByClanId == null ? null : profileJsonByClanId.get(clanId);
-			if (profileJson == null)
-			{
-				continue;
-			}
-			JsonObject profile = new Gson().fromJson(profileJson, JsonObject.class);
-			if (profile == null || !profile.has("members") || !profile.get("members").isJsonArray())
-			{
-				continue;
-			}
-			String clanName = string(profile, "clan_name");
-			JsonObject rankings = profile.has("rankings") && profile.get("rankings").isJsonObject()
-				? profile.getAsJsonObject("rankings") : new JsonObject();
-			Integer cwa = publicRating(rankings, "cwa");
-			Integer wildy = publicRating(rankings, "wildy");
-			for (JsonElement memberElement : profile.getAsJsonArray("members"))
-			{
-				JsonObject member = memberElement.getAsJsonObject();
-				if (member.has("public") && member.get("public").getAsBoolean())
-				{
-					String playerName = normalizePlayerName(string(member, "displayName"));
-					if (!playerName.isEmpty())
-					{
-						profiles.put(playerName, new NearbyPlayerProfile(clanName, cwa, wildy));
-					}
-				}
-			}
-		}
-		return Collections.unmodifiableMap(profiles);
-	}
-
-	private static Integer publicRating(JsonObject rankings, String mode)
-	{
-		if (!rankings.has(mode) || !rankings.get(mode).isJsonObject())
-		{
-			return null;
-		}
-		JsonObject rating = rankings.getAsJsonObject(mode);
-		return "rated".equalsIgnoreCase(string(rating, "status")) && rating.has("rating") && !rating.get("rating").isJsonNull()
-			? rating.get("rating").getAsInt() : null;
-	}
-
-	static String normalizePlayerName(String value)
-	{
-		return value == null ? "" : value.trim().toLowerCase().replace('_', ' ').replaceAll("\\s+", " ");
+		return parseSessionResponse(post("/api/plugin/register", registrationJson(installId, access, pluginVersion), Collections.emptyMap()));
 	}
 
 	ClanWarBoardSession rotateSession(ClanWarBoardSession session) throws IOException
@@ -245,25 +162,6 @@ final class ClanWarBoardApiClient
 	}
 
 
-	void submitTelemetry(ClanWarBoardSession session, List<ClanWarBoardTelemetryEvent> events) throws IOException
-	{
-		if (events == null || events.isEmpty())
-		{
-			return;
-		}
-		StringBuilder payload = new StringBuilder();
-		payload.append("{\"schemaVersion\":1,\"events\":[");
-		for (int i = 0; i < events.size(); i++)
-		{
-			if (i > 0)
-			{
-				payload.append(',');
-			}
-			payload.append(events.get(i).toJson());
-		}
-		payload.append("]}");
-		post("/api/plugin/events/batch", payload.toString(), authenticatedHeaders(session.getToken()));
-	}
 
 	static String availabilityJson(String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
@@ -345,34 +243,14 @@ final class ClanWarBoardApiClient
 		}
 	}
 
-	static String registrationJson(String installId, ClanAccess access, String pluginVersion, boolean publicStats)
+	static String registrationJson(String installId, ClanAccess access, String pluginVersion)
 	{
-		return registrationJson(installId, access, pluginVersion, publicStats, Collections.emptyList());
-	}
-
-	static String registrationJson(String installId, ClanAccess access, String pluginVersion, boolean publicStats, List<String> rosterMembers)
-	{
-		StringBuilder roster = new StringBuilder();
-		for (String member : rosterMembers == null ? Collections.<String>emptyList() : rosterMembers)
-		{
-			String name = member == null ? "" : member.trim();
-			if (name.isEmpty())
-			{
-				continue;
-			}
-			if (roster.length() > 0)
-			{
-				roster.append(',');
-			}
-			roster.append("\"").append(jsonEscape(name)).append("\"");
-		}
 		return "{\"installId\":\"" + jsonEscape(installId) +
 			"\",\"playerName\":\"" + jsonEscape(access.getPlayerName()) +
 			"\",\"clanName\":\"" + jsonEscape(access.getClanName()) +
 			"\",\"clanRank\":" + access.getRankValue() +
 			",\"pluginVersion\":\"" + jsonEscape(pluginVersion) +
-			"\",\"publicStats\":" + publicStats +
-			",\"rosterMembers\":[" + roster + "]}";
+			"\"}";
 	}
 
 	static Map<String, String> authenticatedHeaders(String token)

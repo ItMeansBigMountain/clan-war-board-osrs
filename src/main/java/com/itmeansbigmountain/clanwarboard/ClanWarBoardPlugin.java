@@ -6,10 +6,6 @@ import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -23,11 +19,9 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
-import net.runelite.api.coords.WorldPoint;
-import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.events.HitsplatApplied;
+
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.clan.ClanMember;
@@ -42,7 +36,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
-import net.runelite.client.ui.overlay.OverlayManager;
+
 import net.runelite.client.util.ColorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,17 +75,11 @@ public class ClanWarBoardPlugin extends Plugin
 	@Inject
 	private ClientThread clientThread;
 
-	@Inject
-	private OverlayManager overlayManager;
-
-	@Inject
-	private ClanWarBoardPlayerOverlay playerOverlay;
 
 	private ClanWarBoardPanel panel;
 	private NavigationButton navButton;
 	private ScheduledFuture<?> autoRefreshTask;
-	private final ClanWarBoardTelemetryBuffer telemetryBuffer = new ClanWarBoardTelemetryBuffer();
-	private final CombatSignalTracker combatSignals = new CombatSignalTracker();
+
 	private final AtomicBoolean sessionRefreshInFlight = new AtomicBoolean();
 	private final AtomicBoolean boardRefreshInFlight = new AtomicBoolean();
 	private final AtomicBoolean matchActionInFlight = new AtomicBoolean();
@@ -101,8 +89,7 @@ public class ClanWarBoardPlugin extends Plugin
 	private volatile String activeContext = "|";
 	private volatile long identityGeneration;
 	private volatile boolean running;
-	private volatile boolean telemetrySharingEnabled;
-	private volatile Map<String, NearbyPlayerProfile> publicPlayerProfiles = Collections.emptyMap();
+
 	private volatile ClanWarBoardState boardState = ClanWarBoardState.offline("Online sync has not refreshed yet");
 	private volatile String boardStateContext = "|";
 	private volatile long boardStateGeneration;
@@ -113,7 +100,6 @@ public class ClanWarBoardPlugin extends Plugin
 	protected void startUp()
 	{
 		running = true;
-		telemetrySharingEnabled = config.shareWarTelemetry();
 		panel = new ClanWarBoardPanel(new ClanWarBoardPanel.MatchActionHandler()
 		{
 			@Override
@@ -159,7 +145,6 @@ public class ClanWarBoardPlugin extends Plugin
 			.panel(panel)
 			.build();
 		clientToolbar.addNavigation(navButton);
-		overlayManager.add(playerOverlay);
 		refreshPanel();
 		refreshOnlineBoard();
 		autoRefreshTask = executorService.scheduleWithFixedDelay(
@@ -172,7 +157,6 @@ public class ClanWarBoardPlugin extends Plugin
 	protected void shutDown()
 	{
 		running = false;
-		telemetrySharingEnabled = false;
 		if (autoRefreshTask != null)
 		{
 			autoRefreshTask.cancel(false);
@@ -185,10 +169,7 @@ public class ClanWarBoardPlugin extends Plugin
 		identityGeneration++;
 		boardStateContext = "|";
 		boardStateGeneration = 0L;
-		telemetryBuffer.clear();
-		combatSignals.reset();
-		publicPlayerProfiles = Collections.emptyMap();
-		overlayManager.remove(playerOverlay);
+
 		clientToolbar.removeNavigation(navButton);
 		navButton = null;
 		panel = null;
@@ -208,7 +189,6 @@ public class ClanWarBoardPlugin extends Plugin
 			|| gameStateChanged.getGameState() == GameState.HOPPING)
 		{
 			bindIdentity("|");
-			combatSignals.reset();
 			refreshPanel();
 		}
 	}
@@ -218,21 +198,7 @@ public class ClanWarBoardPlugin extends Plugin
 	{
 		if (ClanWarBoardConfig.CONFIG_GROUP.equals(event.getGroup()))
 		{
-			telemetrySharingEnabled = config.shareWarTelemetry();
-			if (!telemetrySharingEnabled)
-			{
-				telemetryBuffer.clear();
-				combatSignals.reset();
-			}
-			if (!config.showPlayerOverheads())
-			{
-				publicPlayerProfiles = Collections.emptyMap();
-			}
 			refreshPanel();
-			if ("publicPlayerTracking".equals(event.getKey()) || "showPlayerOverheads".equals(event.getKey()))
-			{
-				refreshOnlineBoard();
-			}
 		}
 	}
 
@@ -251,77 +217,9 @@ public class ClanWarBoardPlugin extends Plugin
 		ClanAccess access = clanAccess();
 		bindIdentity(refreshContext(access));
 		rotateSessionIfNeeded();
-		int currentTick = client.getTickCount();
-		if (currentTick % 5 == 0)
+		if (client.getTickCount() % 5 == 0)
 		{
 			refreshClanSnapshotIfChanged();
-		}
-		if (telemetrySharingEnabled && telemetryBuffer.shouldHeartbeat(currentTick))
-		{
-			queueTelemetry("heartbeat", null, 0, access, "periodic_client_presence", "high", "none");
-		}
-		flushTelemetryIfReady();
-	}
-
-	@Subscribe
-	public void onHitsplatApplied(HitsplatApplied event)
-	{
-		if (!telemetrySharingEnabled || !(event.getActor() instanceof Player) || event.getHitsplat() == null)
-		{
-			return;
-		}
-		int amount = event.getHitsplat().getAmount();
-		if (amount <= 0)
-		{
-			return;
-		}
-		Player local = client.getLocalPlayer();
-		Player target = (Player) event.getActor();
-		if (local == null || target.getName() == null)
-		{
-			return;
-		}
-		ClanAccess access = clanAccess();
-		if (target == local)
-		{
-			Player attacker = soleInteractingAttacker(local);
-			String attackerName = attacker == null ? null : attacker.getName();
-			emitCombatReturn(access, attackerName);
-			queueTelemetry("damage_taken", attackerName, amount, access,
-				attacker == null ? "local_hitsplat_attacker_unresolved" : "local_hitsplat_single_interacting_attacker",
-				attacker == null ? "high_amount_low_source" : "medium", relationFor(attackerName));
-		}
-		else if (event.getHitsplat().isMine())
-		{
-			emitCombatReturn(access, target.getName());
-			combatSignals.recordOutgoingDamage(target.getName(), client.getTickCount());
-			boolean ownClan = isOwnClanMember(target.getName());
-			queueTelemetry(ownClan ? "friendly_fire_damage" : "damage_dealt", target.getName(), amount, access,
-				"local_player_hitsplat", "high", ownClan ? "own_clan" : "non_own_clan");
-		}
-	}
-
-	@Subscribe
-	public void onActorDeath(ActorDeath event)
-	{
-		if (!telemetrySharingEnabled || !(event.getActor() instanceof Player))
-		{
-			return;
-		}
-		Player local = client.getLocalPlayer();
-		Player dead = (Player) event.getActor();
-		ClanAccess access = clanAccess();
-		if (local != null && dead == local)
-		{
-			combatSignals.recordLocalDeath();
-			queueTelemetry("death", null, 1, access, "local_actor_death", "high", "self");
-			flushTelemetryNow();
-		}
-		else if (dead.getName() != null && combatSignals.consumeObservedKill(dead.getName(), client.getTickCount()))
-		{
-			queueTelemetry("kill_candidate", dead.getName(), 1, access,
-				"target_death_with_recent_local_damage", "medium", relationFor(dead.getName()));
-			flushTelemetryNow();
 		}
 	}
 
@@ -375,39 +273,28 @@ public class ClanWarBoardPlugin extends Plugin
 		long previousStateGeneration = boardStateGeneration;
 		int currentClanMemberCount = clanMemberCount();
 		String installationId = installationId();
-		List<String> rosterMembers = clanRosterMembers();
-		boolean loadPlayerOverheads = config.showPlayerOverheads();
-		Map<String, NearbyPlayerProfile> previousProfiles = publicPlayerProfiles;
 		submitAsync(executorService, () ->
 		{
 			ClanWarBoardState completedState;
 			ClanWarBoardSession refreshedSession = null;
-			Map<String, NearbyPlayerProfile> completedProfiles = Collections.emptyMap();
 			try
 			{
 				if (registrationAccess.getClanName() != null && !registrationAccess.getClanName().trim().isEmpty())
 				{
-					refreshedSession = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION, config.publicPlayerTracking(), rosterMembers);
+					refreshedSession = apiClient.register(installationId, registrationAccess, PLUGIN_VERSION);
 				}
 				completedState = apiClient.fetchBoardState(registrationAccess.getClanName(), currentClanMemberCount, refreshedSession);
-				if (loadPlayerOverheads)
-				{
-					completedProfiles = apiClient.fetchPublicPlayerProfiles();
-				}
 			}
 			catch (IOException ex)
 			{
 				log.debug("Clan War Board API refresh failed", ex);
 				completedState = failureState(previousState, previousStateContext, previousStateGeneration,
 					refreshContext, refreshGeneration, ex.getMessage());
-				if (loadPlayerOverheads && isIdentityCurrent(previousStateContext, previousStateGeneration, refreshContext, refreshGeneration))
-				{
-					completedProfiles = previousProfiles;
-				}
+
 			}
 			ClanWarBoardState refreshedState = completedState;
 			ClanWarBoardSession completedSession = refreshedSession;
-			Map<String, NearbyPlayerProfile> refreshedProfiles = completedProfiles;
+
 			clientThread.invoke(() ->
 			{
 				boolean contextCurrent = isIdentityCurrent(refreshContext, refreshGeneration,
@@ -422,7 +309,7 @@ public class ClanWarBoardPlugin extends Plugin
 						boardState = refreshedState;
 						boardStateContext = refreshContext;
 						boardStateGeneration = refreshGeneration;
-						publicPlayerProfiles = loadPlayerOverheads ? refreshedProfiles : Collections.emptyMap();
+
 						if (loginMessagePending)
 						{
 							loginMessagePending = false;
@@ -465,17 +352,10 @@ public class ClanWarBoardPlugin extends Plugin
 		session = null;
 		sessionContext = "|";
 		sessionGeneration = 0L;
-		telemetryBuffer.clear();
-		combatSignals.reset();
+
 		boardState = ClanWarBoardState.offline("Waiting for this clan's service refresh");
 		boardStateContext = normalized;
 		boardStateGeneration = identityGeneration;
-		publicPlayerProfiles = Collections.emptyMap();
-	}
-
-	NearbyPlayerProfile publicProfile(String playerName)
-	{
-		return publicPlayerProfiles.get(ClanWarBoardApiClient.normalizePlayerName(playerName));
 	}
 
 	static boolean isRefreshContextCurrent(String expected, String current)
@@ -747,158 +627,6 @@ public class ClanWarBoardPlugin extends Plugin
 		});
 	}
 
-	private void emitCombatReturn(ClanAccess access, String opponentName)
-	{
-		if (combatSignals.consumeCombatReturn())
-		{
-			queueTelemetry("return", opponentName, 1, access,
-				"first_combat_event_after_local_death", "high", relationFor(opponentName));
-		}
-	}
-
-	private Player soleInteractingAttacker(Player local)
-	{
-		Player candidate = null;
-		WorldPoint localPoint = local.getWorldLocation();
-		for (Player player : client.getPlayers())
-		{
-			if (player == null || player == local || player.getInteracting() != local || player.getName() == null)
-			{
-				continue;
-			}
-			if (localPoint != null && player.getWorldLocation() != null && player.getWorldLocation().distanceTo(localPoint) > 15)
-			{
-				continue;
-			}
-			if (candidate != null)
-			{
-				return null;
-			}
-			candidate = player;
-		}
-		return candidate;
-	}
-
-	private String relationFor(String playerName)
-	{
-		if (playerName == null || playerName.trim().isEmpty())
-		{
-			return "unattributed";
-		}
-		return isOwnClanMember(playerName) ? "own_clan" : "non_own_clan";
-	}
-
-	private void queueTelemetry(String type, String opponentName, int amount, ClanAccess access,
-		String evidence, String confidence, String relation)
-	{
-		if (!telemetrySharingEnabled)
-		{
-			return;
-		}
-		ClanAccess liveAccess = clanAccess();
-		String liveContext = refreshContext(liveAccess);
-		bindIdentity(liveContext);
-		if (!isRefreshContextCurrent(refreshContext(access), liveContext))
-		{
-			return;
-		}
-		Player local = client.getLocalPlayer();
-		WorldPoint location = local == null ? null : local.getWorldLocation();
-		telemetryBuffer.add(new ClanWarBoardTelemetryEvent(
-			type,
-			liveAccess.getPlayerName(),
-			liveAccess.getClanName(),
-			opponentName,
-			amount,
-			client.getWorld(),
-			client.getTickCount(),
-			System.currentTimeMillis(),
-			config.publicPlayerTracking(),
-			evidence,
-			confidence,
-			relation,
-			location == null ? 0 : location.getRegionID(),
-			location == null ? 0 : location.getX(),
-			location == null ? 0 : location.getY(),
-			location == null ? 0 : location.getPlane()
-		));
-	}
-
-	private void flushTelemetryIfReady()
-	{
-		if (!telemetrySharingEnabled)
-		{
-			telemetryBuffer.clear();
-			return;
-		}
-		long now = System.currentTimeMillis();
-		if (telemetryBuffer.shouldFlush(now))
-		{
-			flushTelemetry(now);
-		}
-	}
-
-	private void flushTelemetryNow()
-	{
-		flushTelemetry(System.currentTimeMillis());
-	}
-
-	private void flushTelemetry(long now)
-	{
-		if (!telemetrySharingEnabled)
-		{
-			telemetryBuffer.clear();
-			return;
-		}
-		bindIdentity(refreshContext(clanAccess()));
-		ClanWarBoardSession current = session;
-		String telemetryContext = sessionContext;
-		long telemetryGeneration = sessionGeneration;
-		if (current == null || !isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration))
-		{
-			return;
-		}
-		List<ClanWarBoardTelemetryEvent> batch = telemetryBuffer.drain(now);
-		if (batch.isEmpty())
-		{
-			return;
-		}
-		submitAsync(executorService, () ->
-		{
-			if (!telemetrySharingEnabled
-				|| !isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
-				|| !isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
-			{
-				return;
-			}
-			try
-			{
-				apiClient.submitTelemetry(current, batch);
-			}
-			catch (IOException ex)
-			{
-				if (telemetrySharingEnabled
-					&& isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
-					&& isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
-				{
-					telemetryBuffer.requeue(batch);
-					log.debug("Clan War Board telemetry upload failed; batch requeued", ex);
-				}
-				else
-				{
-					log.debug("Clan War Board telemetry upload failed after identity changed; batch discarded", ex);
-				}
-			}
-		}, () ->
-		{
-			if (telemetrySharingEnabled
-				&& isIdentityCurrent(telemetryContext, telemetryGeneration, activeContext, identityGeneration)
-				&& isIdentityCurrent(telemetryContext, telemetryGeneration, sessionContext, sessionGeneration))
-			{
-				telemetryBuffer.requeue(batch);
-			}
-		});
-	}
 
 	private ClanAccess clanAccess()
 	{
@@ -930,11 +658,6 @@ public class ClanWarBoardPlugin extends Plugin
 		return new ClanAccess(playerName, clan.getName(), rankValue);
 	}
 
-	private boolean isOwnClanMember(String playerName)
-	{
-		ClanSettings settings = client.getClanSettings();
-		return settings != null && playerName != null && settings.findMember(playerName) != null;
-	}
 
 	private int clanMemberCount()
 	{
@@ -942,23 +665,6 @@ public class ClanWarBoardPlugin extends Plugin
 		return settings == null || settings.getMembers() == null ? 0 : settings.getMembers().size();
 	}
 
-	private List<String> clanRosterMembers()
-	{
-		List<String> names = new ArrayList<>();
-		ClanSettings settings = client.getClanSettings();
-		if (settings == null || settings.getMembers() == null)
-		{
-			return names;
-		}
-		for (ClanMember member : settings.getMembers())
-		{
-			if (member != null && member.getName() != null && !member.getName().trim().isEmpty())
-			{
-				names.add(member.getName());
-			}
-		}
-		return names;
-	}
 
 	private String installationId()
 	{

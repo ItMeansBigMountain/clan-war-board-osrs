@@ -1,5 +1,14 @@
 # Production-readiness audit — 2026-08-23
 
+## Plugin Hub policy gate
+
+- Re-checked the current RuneLite Plugin Hub README, RuneLite Rejected/Rolled-Back Features page (updated 2026-06-29), and Jagex Third Party Client Guidelines.
+- Removed the plugin's complete combat/location telemetry lane, opponent-name observation, clan-roster upload, public nearby-player profile fetch, and player overhead rendering. RuneLite explicitly rejects plugins that crowdsource other players' names, locations, gear, or similar data; Jagex also prohibits PvP scouting and opposing-clan indicators.
+- Production configuration now exposes only the minimum clan-rank preference and login-message preference. The HTTPS service origin remains pinned and has no user-configurable setting.
+- Registration sends only the installation UUID, local player name, primary clan name, observed local rank, and plugin version. No roster, nearby-player, opponent, combat, gear, or location observations are collected or uploaded.
+- `runelite-plugin.properties` now includes `version=1.0.0` and `build=standard`; the Plugin Hub standard build therefore uses only RuneLite's bundled dependency set.
+- The root and toolbar icons are matching 48x48 RGBA product assets. Their SHA-256 is `ff8645ea44ab2f8de003da32aaf267e9055ae430f32b4a4e58b378031421d081`; the only identical files in the portfolio scan were this repository's root/resource/build copies.
+
 Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and rendered website. OSRS/RuneLite sources only.
 
 ## Verified
@@ -58,3 +67,12 @@ Scope: RuneLite plugin, `clan-war-board-service`, deployed Azure API, and render
 ## Release decision
 
 Deployment, security, moderation, and visual-QA gates are now closed. Keep this repository in `in-progress` until the queued isolated end-to-end release validation and Plugin Hub compliance/package review pass. The open Who's Grinding submission also blocks opening another Plugin Hub PR by the user-approved queue rule.
+
+## P0 release validation — 2026-08-23T21:24:35Z
+
+- **Java/plugin:** Java 11 `./gradlew clean test assemble --no-daemon --console=plain` passed with Temurin 11.0.31.
+- **Service/API:** `python3 -m unittest discover -s tests -v` passed all 42 `clan-war-board-service` tests.
+- **Website/replay:** `npx playwright test tests/replay-browser.spec.mjs --reporter=line` passed both browser replay tests against routed fixture APIs.
+- **Isolated end-to-end workflow:** `build/reports/cwb_release_validation.py` forced memory-local storage, cleared all in-process stores, and wrote `build/reports/cwb-release-validation.json` after exercising registration, server leader verification, availability, challenge, counter, mutual acceptance, immutable roster snapshots, optional telemetry, mutual result confirmation, dispute, moderation void, separate CWA/Wildy rating updates, public privacy filtering, and replay-summary generation. The run did not set Cosmos credentials or write production data.
+- **Live read-only probes:** the canonical Azure origin returned Cosmos production-ready health, one preserved real clan, privacy-filtered clan profile data, separate CWA/Wildy standings, empty `rating.v1` audit records, empty availability/battle collections, CWA/Wildy fight-mode contract, a truthful 404 for a nonexistent replay, and HTTP 200 direct SPA routes for `/`, `/clans`, `/fights`, `/leaderboard`, and `/results`.
+- **Migration/IaC:** `terraform`/`tofu` are not installed on this host, so full provider validation could not run locally. As a fallback, `uv run --with python-hcl2` parsed all five Terraform files and verified the additive Cosmos shape: free-tier Cosmos account plus `clans`, `wars`, and `summaries` SQL containers with partition keys.

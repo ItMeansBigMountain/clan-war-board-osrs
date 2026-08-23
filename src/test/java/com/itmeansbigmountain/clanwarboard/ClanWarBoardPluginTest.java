@@ -56,16 +56,15 @@ public class ClanWarBoardPluginTest
 
 		assertEquals("clanwarboard", group.value());
 		assertEquals(LeaderMinimumRank.ADMINISTRATOR, config.minimumLeaderRank());
-		assertFalse(config.shareWarTelemetry());
-		assertFalse(config.publicPlayerTracking());
-		assertFalse(config.showPlayerOverheads());
-		assertEquals(FightMode.CWA, config.overheadRatingMode());
 		assertTrue(config.showLoginMessage());
 		Set<String> methodNames = java.util.Arrays.stream(ClanWarBoardConfig.class.getMethods())
 			.map(java.lang.reflect.Method::getName)
 			.collect(Collectors.toSet());
 		assertFalse(methodNames.contains("serviceUrl"));
 		assertFalse(methodNames.contains("developmentRoleOverride"));
+		assertFalse(methodNames.contains("shareWarTelemetry"));
+		assertFalse(methodNames.contains("publicPlayerTracking"));
+		assertFalse(methodNames.contains("showPlayerOverheads"));
 		assertFalse(methodNames.contains("warName"));
 		assertFalse(methodNames.contains("opponentClan"));
 		assertFalse(methodNames.contains("warDate"));
@@ -74,30 +73,6 @@ public class ClanWarBoardPluginTest
 		assertFalse(methodNames.contains("rules"));
 	}
 
-	@Test
-	public void publicOverheadProfilesExcludePrivateMembersAndKeepModeRatingsSeparate()
-	{
-		String clans = "{\"clans\":[{\"clan_id\":\"rs-venom\"}]}";
-		Map<String, String> profiles = Collections.singletonMap("rs-venom",
-			"{\"clan_name\":\"Rs Venom\",\"members\":[" +
-				"{\"displayName\":\"Oyama\",\"public\":true}," +
-				"{\"displayName\":\"Hidden\",\"public\":false}]," +
-				"\"rankings\":{\"cwa\":{\"rating\":1542,\"status\":\"rated\"}," +
-				"\"wildy\":{\"rating\":1398,\"status\":\"rated\"}}}");
-
-		Map<String, NearbyPlayerProfile> parsed = ClanWarBoardApiClient.parsePublicPlayerProfiles(clans, profiles);
-		assertEquals(1, parsed.size());
-		assertFalse(parsed.containsKey("hidden"));
-		assertEquals("Rs Venom · CWA 1542", parsed.get("oyama").overheadText(FightMode.CWA));
-		assertEquals("Rs Venom · Wildy 1398", parsed.get("oyama").overheadText(FightMode.WILDY));
-	}
-
-	@Test
-	public void unratedOverheadNeverInventsAnElo()
-	{
-		NearbyPlayerProfile profile = new NearbyPlayerProfile("Rs Venom", null, null);
-		assertEquals("Rs Venom · CWA unrated", profile.overheadText(FightMode.CWA));
-	}
 
 	@Test
 	public void boardRefreshCadenceIsBoundedAndReviewFriendly()
@@ -380,24 +355,14 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
-	public void registrationPayloadCarriesRealClanAndPrivacyWithoutDevelopmentAuthority()
+	public void registrationPayloadCarriesOnlyCurrentPlayerAndClanAuthorityEvidence()
 	{
-		String json = ClanWarBoardApiClient.registrationJson("11111111-1111-4111-8111-111111111111", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", false);
+		String json = ClanWarBoardApiClient.registrationJson("11111111-1111-4111-8111-111111111111", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0");
 		assertTrue(json.contains("\"clanName\":\"TRAPISTAN\""));
 		assertTrue(json.contains("\"clanRank\":126"));
-		assertTrue(json.contains("\"publicStats\":false"));
+		assertFalse(json.contains("rosterMembers"));
+		assertFalse(json.contains("publicStats"));
 		assertFalse(json.contains("pretend"));
-	}
-
-	@Test
-	public void registrationPayloadIncludesPrivateRosterSnapshotWithoutLeaderSecrets()
-	{
-		String json = ClanWarBoardApiClient.registrationJson("11111111-1111-4111-8111-111111111111",
-			new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", false,
-			java.util.Arrays.asList("Oyama", "Deputy", "Member\\\"Name"));
-		assertTrue(json.contains("\"rosterMembers\":[\"Oyama\",\"Deputy\",\"Member\\\\\\\"Name\"]"));
-		assertFalse(json.contains("leaderClaim"));
-		assertFalse(json.contains("secret"));
 	}
 
 	@Test
@@ -432,67 +397,6 @@ public class ClanWarBoardPluginTest
 		ClanWarBoardApiClient.parseSession("{\"capabilities\":[\"member:read\"]}");
 	}
 
-	@Test
-	public void telemetryEventsRespectWebsitePrivacy()
-	{
-		ClanWarBoardTelemetryEvent privateEvent = new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy", 31, 330, 123, 456L, false);
-		ClanWarBoardTelemetryEvent publicEvent = new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy", 31, 330, 123, 456L, true);
-
-		assertTrue(privateEvent.toJson().contains("\"playerName\":\"private\""));
-		assertFalse(privateEvent.toJson().contains("Oyama"));
-		assertTrue(publicEvent.toJson().contains("\"playerName\":\"Oyama\""));
-		assertTrue(privateEvent.toJson().contains("\"world\":330"));
-	}
-
-	@Test
-	public void combatSignalsRequireRecentDamageAndCountOneReturnPerDeath()
-	{
-		CombatSignalTracker tracker = new CombatSignalTracker();
-		tracker.recordOutgoingDamage("Enemy", 100);
-		assertTrue(tracker.consumeObservedKill(" enemy ", 119));
-		assertFalse(tracker.consumeObservedKill("Enemy", 120));
-
-		tracker.recordOutgoingDamage("Late", 200);
-		assertFalse(tracker.consumeObservedKill("Late", 221));
-		tracker.recordLocalDeath();
-		assertTrue(tracker.consumeCombatReturn());
-		assertFalse(tracker.consumeCombatReturn());
-	}
-
-	@Test
-	public void enrichedTelemetryCarriesEvidenceLocationAndOpponent()
-	{
-		ClanWarBoardTelemetryEvent event = new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy",
-			31, 330, 123, 456L, true, "local_player_hitsplat", "high", "non_own_clan", 12850, 3200, 3600, 0);
-		String json = event.toJson();
-		assertTrue(json.contains("\"opponentName\":\"Enemy\""));
-		assertTrue(json.contains("\"evidence\":\"local_player_hitsplat\""));
-		assertTrue(json.contains("\"confidence\":\"high\""));
-		assertTrue(json.contains("\"regionId\":12850"));
-		assertTrue(json.contains("\"x\":3200"));
-	}
-
-	@Test
-	public void telemetryBufferBatchesAndThrottles()
-	{
-		ClanWarBoardTelemetryBuffer buffer = new ClanWarBoardTelemetryBuffer();
-		assertTrue(buffer.shouldHeartbeat(100));
-		assertFalse(buffer.shouldHeartbeat(150));
-		for (int i = 0; i < ClanWarBoardTelemetryBuffer.MAX_EVENTS_PER_BATCH + 1; i++)
-		{
-			buffer.add(new ClanWarBoardTelemetryEvent("heartbeat", "Oyama", "TRAPISTAN", null, 0, 330, i, i, false));
-		}
-		assertTrue(buffer.shouldFlush(1L));
-		assertEquals(ClanWarBoardTelemetryBuffer.MAX_EVENTS_PER_BATCH, buffer.drain(1L).size());
-		assertEquals(1, buffer.size());
-		List<ClanWarBoardTelemetryEvent> failed = buffer.drain(20_000L);
-		assertEquals(1, failed.size());
-		buffer.requeue(failed);
-		assertEquals(1, buffer.size());
-		buffer.clear();
-		assertEquals(0, buffer.size());
-		assertTrue(buffer.shouldHeartbeat(1));
-	}
 
 	@Test
 	public void playerMetricsPreserveAllTrackedDamageCategories()
@@ -562,39 +466,6 @@ public class ClanWarBoardPluginTest
 		}
 	}
 
-	@Test
-	public void mockWebServerCapturesRegistrationPrivacyAndTelemetryOptOutRequestShapes() throws Exception
-	{
-		try (MockWebServer server = new MockWebServer())
-		{
-			server.start();
-			ClanWarBoardApiClient client = testApiClient(server);
-			server.enqueue(jsonResponse(sessionJson("private-token")));
-			server.enqueue(jsonResponse(sessionJson("public-token")));
-			server.enqueue(jsonResponse("{\"accepted\":true}"));
-
-			client.register("install-private", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", false);
-			client.register("install-public", new ClanAccess("Oyama", "TRAPISTAN", 126), "1.0.0", true);
-			client.submitTelemetry(testSession(), Collections.singletonList(new ClanWarBoardTelemetryEvent("damage_dealt", "Oyama", "TRAPISTAN", "Enemy", 31, 330, 123, 456L, false)));
-
-			RecordedRequest privateRegistration = server.takeRequest(1, TimeUnit.SECONDS);
-			RecordedRequest publicRegistration = server.takeRequest(1, TimeUnit.SECONDS);
-			RecordedRequest telemetry = server.takeRequest(1, TimeUnit.SECONDS);
-			assertTrue(privateRegistration.getBody().readUtf8().contains("\"publicStats\":false"));
-			assertTrue(publicRegistration.getBody().readUtf8().contains("\"publicStats\":true"));
-			String telemetryBody = telemetry.getBody().readUtf8();
-			assertTrue(telemetryBody.contains("\"playerName\":\"private\""));
-			assertFalse(telemetryBody.contains("Oyama"));
-			assertEquals("Bearer token", telemetry.getHeader("Authorization"));
-		}
-
-		ClanWarBoardTelemetryBuffer buffer = new ClanWarBoardTelemetryBuffer();
-		buffer.add(new ClanWarBoardTelemetryEvent("heartbeat", "Oyama", "TRAPISTAN", null, 0, 330, 1, 1, false));
-		List<ClanWarBoardTelemetryEvent> drained = buffer.drain(20_000L);
-		assertEquals(1, drained.size());
-		buffer.clear();
-		assertEquals(0, buffer.size());
-	}
 
 	@Test
 	public void leaderAndMemberOperationsUseAuthenticatedPanelEndpoints() throws Exception

@@ -21,54 +21,10 @@ public interface ClanWarBoardConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "shareWarTelemetry",
-		name = "Share War Telemetry",
-		description = "Optional: send confirmed-fight combat events, opponent names, world, time, and location to the Clan War Board Azure service. Disabled sends no telemetry.",
-		position = 1
-	)
-	default boolean shareWarTelemetry()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "publicPlayerTracking",
-		name = "Show My Player Stats Publicly",
-		description = "When telemetry sharing is enabled, show your display name with public fight statistics. Disabled keeps your public telemetry identity private.",
-		position = 2
-	)
-	default boolean publicPlayerTracking()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "showPlayerOverheads",
-		name = "Show Clan & ELO Overheads",
-		description = "Optionally show public Clan War Board clan and rating data above nearby registered players",
-		position = 3
-	)
-	default boolean showPlayerOverheads()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "overheadRatingMode",
-		name = "Overhead Rating Mode",
-		description = "Choose which separate Clan War Board rating appears in overheads",
-		position = 4
-	)
-	default FightMode overheadRatingMode()
-	{
-		return FightMode.CWA;
-	}
-
-	@ConfigItem(
 		keyName = "showLoginMessage",
 		name = "Show Login Message",
 		description = "Show available-fight and next-war information after logging in",
-		position = 5
+		position = 1
 	)
 	default boolean showLoginMessage()
 	{

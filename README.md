@@ -16,7 +16,7 @@ The side panel follows RuneLite's compact group-finder pattern: five fixed-width
 4. **H — History** — browse completed, service-verified fights and open their details without mixing them into the active board.
 5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, history, and player metrics without changing the current page or Board filter.
 
-The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time. A transient service failure preserves the last good immutable board snapshot and marks it offline instead of showing a false empty board, but only while the player/clan identity generation is unchanged. Refresh responses, cached snapshots, sessions, mutations, completion messages, and telemetry queues are bound to both the player/clan identity and the monotonic login generation that created them. Leader writes are revalidated against live clan membership and rank on RuneLite's client thread immediately before dispatch; telemetry re-reads and binds live identity before every enqueue and flush. Identity changes immediately clear private state, stale and A→B→A responses are rejected, and a refresh for the current identity follows.
+The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time. A transient service failure preserves the last good immutable board snapshot and marks it offline instead of showing a false empty board, but only while the player/clan identity generation is unchanged. Refresh responses, cached snapshots, sessions, mutations, and completion messages are bound to both the player/clan identity and the monotonic login generation that created them. Leader writes are revalidated against live clan membership and rank on RuneLite's client thread immediately before dispatch. Identity changes immediately clear private state, stale and A→B→A responses are rejected, and a refresh for the current identity follows.
 
 Fight details use in-panel back navigation, so returning from a detail page keeps the user in the same tab and list filter. Open details reconcile by stable fight ID after refresh and close cleanly if the service removes the fight. Scheduled fights are selected chronologically rather than trusting response order.
 
@@ -40,10 +40,6 @@ Client-side button visibility is not backend authorization. RuneLite-observed ra
 RuneLite settings intentionally contain only:
 
 - `Leader Rank Needed`
-- `Share War Telemetry` — optional and disabled by default. When disabled, no combat/location heartbeat or fight telemetry is queued or uploaded.
-- `Show My Player Stats Publicly`
-- `Show Clan & ELO Overheads` — optional and disabled by default. Shows only server-published members above nearby players; private/unregistered names are never inferred or rendered.
-- `Overhead Rating Mode` — selects the separate CWA or Wildy clan rating shown by the overhead.
 - `Show Login Message`
 
 War creation, opponents, dates, worlds, locations, and rules belong inside the panel workflow. The production service URL is pinned in code and is not user-configurable.
@@ -61,21 +57,18 @@ The plugin talks only to the pinned HTTPS origin `https://salmon-dune-01c80c60f.
 
 | Method and route | Purpose / authorization |
 | --- | --- |
-| `GET /api/health`, `GET /api/clans`, `GET /api/clans/{id}`, `GET /api/public/availability`, `GET /api/fight-modes` | Public service health, privacy-filtered registered members, dual-rank clan profiles, board state, and CWA/Wildy schemas. Clan profiles are read for the optional overhead cache. |
-| `POST /api/plugin/register` | Sends installation UUID, player/clan names, observed rank, plugin version, and public-stats preference; returns a one-hour bearer session and capabilities. |
+| `GET /api/health`, `GET /api/clans`, `GET /api/public/availability`, `GET /api/fight-modes` | Public service health, registered-clan counts, board state, and CWA/Wildy schemas. |
+| `POST /api/plugin/register` | Sends installation UUID, the local player's name, primary-clan name, observed rank, and plugin version; returns a one-hour bearer session and capabilities. It does not send the clan roster or observations about other players. |
 | `POST /api/plugin/session/rotate` | `member:read`; revokes/replaces the current session. |
 | `GET /api/plugin/me/metrics` | `member:read`; returns owner-only aggregates and recent confirmed-fight events. |
 | `POST /api/plugin/availability` | `leader:write`; sends availability terms. |
 | `POST /api/plugin/challenges` | `challenge:write`; sends exact proposed terms to another clan. |
-| `POST /api/plugin/events/batch` | `telemetry:write`; sends up to 50 confirmed-fight observations. |
 
-Authenticated requests use an opaque bearer session plus a fresh timestamp and UUID nonce. Credentials are never shown in configuration or normal logs. Every member receives `member:read` and may receive `telemetry:write`; the plugin uses telemetry capability only when the separate default-off `Share War Telemetry` setting is enabled. Leader capabilities are server-issued from the observed clan rank, and the plugin rechecks live identity/rank immediately before writes. The trust level is RuneLite client-observed rank, not proof signed by Jagex.
+Authenticated requests use an opaque bearer session plus a fresh timestamp and UUID nonce. Credentials are never shown in configuration or normal logs. Leader capabilities are server-issued from the observed clan rank, and the plugin rechecks live identity/rank immediately before writes. The trust level is RuneLite client-observed rank, not proof signed by Jagex.
 
-Core board registration is required while logged into a clan and exposes the user's IP address to Azure. Registration sends installation UUID, player/clan names, observed rank, plugin version, and public-stats preference so the service can authorize the clan board. Leader actions send leader-entered fight terms. Optional confirmed-fight event type/amount/world/tick/time/location/evidence/confidence/relation and observed opponent/attacker names are sent only when `Share War Telemetry` is enabled. Turning it off clears buffered events and prevents new telemetry enqueue or upload. When telemetry is enabled but public player stats are disabled, events use private identity handling and appear publicly under stable anonymous labels; owner-only aggregates use one-way installation/player hashes.
+Core board registration is required while logged into a clan and exposes the user's IP address to Azure. Registration sends the installation UUID, local player/clan names, observed rank, and plugin version so the service can authorize the clan board. Leader actions send only leader-entered fight terms. The plugin does not collect or upload combat events, player locations, opponent names, clan rosters, nearby-player profiles, gear, or other observations about players.
 
-When explicitly enabled, telemetry is accepted only for the session clan, confirmed fight, matching world, and scheduled window. The plugin flushes every 10 seconds or 50 events, bounds the queue to 200, and requeues failed batches only while consent remains enabled. Deterministic IDs prevent retry double-counting. Live public schedules omit exact accepted world/location/rules/notes; completed-fight pages publish terms and detailed aggregate/event analysis.
-
-Refresh failures retain an offline-marked immutable snapshot only for the same player, clan, and login generation. Identity changes clear sessions, private/cache state, and telemetry; malformed/non-success responses are treated as API failures.
+Refresh failures retain an offline-marked immutable snapshot only for the same player, clan, and login generation. Identity changes clear sessions and private/cache state; malformed/non-success responses are treated as API failures.
 
 ## Build and test
 
@@ -95,7 +88,7 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 
 ## Manual verification
 
-1. Confirm the settings page contains no service URL, development role, or war form fields; `Share War Telemetry` is off by default.
+1. Confirm the settings page contains no service URL, development role, telemetry, public-player, overhead, or war form fields.
 2. Confirm the panel shows C, B, +, H, and ↻ controls with descriptive tooltips.
 3. Confirm Board shows count-badged Open and Scheduled filters.
 4. Confirm a member cannot open an unopposed post.
@@ -111,11 +104,9 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 14. Confirm changing player or primary clan during a refresh cannot install the previous identity's response.
 15. Confirm invalid time, duration, combat range, world, or location stays in the form with an inline error and sends no request.
 16. Confirm repeated submission clicks cannot create duplicate in-flight fight requests.
-17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls, player metrics, scheduled/private state, and queued telemetry before the new identity refresh completes.
+17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls, player metrics, and scheduled/private state before the new identity refresh completes.
 18. Confirm a failed refresh after changing identity cannot restore the previous identity's cached board or session.
-19. Confirm disabled telemetry produces no heartbeat, combat event, queue growth, batch request, or retry; turning it off clears an existing buffer immediately.
-20. Confirm the mode button starts on CWA, switches to Wildy without overflow, and sends distinct `mode`/`returnsAllowed` terms.
-21. Confirm player overheads are absent by default; when enabled, only public registered members render, and switching the configured mode changes CWA/Wildy rating without mixing them.
+19. Confirm the mode button starts on CWA, switches to Wildy without overflow, and sends distinct `mode`/`returnsAllowed` terms.
 
 ## CWA research and scoring design
 
