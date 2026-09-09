@@ -44,7 +44,7 @@ public class ClanWarBoardPluginTest
 		PluginDescriptor descriptor = ClanWarBoardPlugin.class.getAnnotation(PluginDescriptor.class);
 
 		assertEquals("Clan War Board", descriptor.name());
-		assertEquals("Sets up CWA and Wilderness clan fights with rankings and post-fight analysis.", descriptor.description());
+		assertEquals("Arranges CWA and Wilderness clan fights on an online war board.", descriptor.description());
 		assertArrayEquals(new String[] {"clan", "war", "pvp", "cwa", "wilderness"}, descriptor.tags());
 	}
 

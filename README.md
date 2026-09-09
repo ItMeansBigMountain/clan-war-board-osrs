@@ -1,3 +1,5 @@
+[Support development on Buy Me a Coffee](https://buymeacoffee.com/affanfareev).
+
 # Clan War Board
 
 Clan War Board is a RuneLite external plugin for OSRS clans to arrange and record Clan Wars Arena (CWA) and Wilderness fights. **CWA is primary** and **Wildy is secondary**. Each format has separate fights, history, and clan ratings. It is an organization and mutually confirmed results board—not a live enemy tracker, scouting tool, or combat analytics collector.
@@ -12,10 +14,10 @@ The full-width button at the top switches **CWA | Wildy**. CWA defaults to no-re
 
 The side panel follows RuneLite's compact group-finder pattern: five fixed-width controls with tooltips, dense fight cards, count badges, explicit empty states, and a persistent connection footer:
 
-1. **C — Clan** — clan overview, installed-plugin coverage, clan-level fight counts, and the next planned war.
-2. **B — Board** — switch between count-badged **Open** and **Scheduled** lists. Members see truthful read-only cards. Server-authorized leaders can open an availability post and use it to prefill a new private challenge draft.
-3. **+ — Create** — server-authorized leaders can publish a public availability post or send exact private terms to another clan. The form separates common fight fields from private challenge terms.
-4. **H — History** — browse completed, service-verified fights and open their details without mixing them into the active board.
+1. **Home** — clan overview, installed-plugin coverage, clan-level fight counts, and the next planned war.
+2. **Board** — switch between count-badged **Open** and **Set** lists. Members see truthful read-only cards. Server-authorized leaders can open an availability post and use it to prefill a new private challenge draft.
+3. **New** — server-authorized leaders can publish a public availability post or send exact private terms to another clan. The form separates common fight fields from private challenge terms.
+4. **Hist** — browse completed, service-verified fights and open their details without mixing them into the active board.
 5. **↻ — Reload** — reloads the complete clan snapshot, registration/session authorization, coverage, listings, and history without changing the current page or Board filter.
 
 The board also performs one guarded background refresh every 60 seconds, so another clan's new or updated post appears without requiring a relog or manual reload. Startup, login, clan-change, post-action, and manual refreshes remain active. Only one board refresh may be in flight at a time. A transient service failure preserves the last good immutable board snapshot and marks it offline instead of showing a false empty board, but only while the player/clan identity generation is unchanged. Refresh responses, cached snapshots, sessions, mutations, and completion messages are bound to both the player/clan identity and the monotonic login generation that created them. Leader writes are revalidated against live clan membership and rank on RuneLite's client thread immediately before dispatch. Identity changes immediately clear private state, stale and A→B→A responses are rejected, and a refresh for the current identity follows.
@@ -108,6 +110,10 @@ gradlew.bat clean test assemble --no-daemon --console=plain
 17. Confirm logout, world hop, player change, or primary-clan change immediately removes prior leader controls and scheduled/private state before the new identity refresh completes.
 18. Confirm a failed refresh after changing identity cannot restore the previous identity's cached board or session.
 19. Confirm the mode button starts on CWA, switches to Wildy without overflow, and sends distinct `mode`/`returnsAllowed` terms.
+
+## Support
+
+Report plugin bugs or request support through [GitHub Issues](https://github.com/ItMeansBigMountain/clan-war-board-osrs/issues).
 
 ## Historical research
 

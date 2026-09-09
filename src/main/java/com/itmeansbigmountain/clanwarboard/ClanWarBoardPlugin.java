@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 
 @PluginDescriptor(
 	name = ClanWarBoardPlugin.PLUGIN_NAME,
-	description = "Sets up CWA and Wilderness clan fights with rankings and post-fight analysis.",
+	description = "Arranges CWA and Wilderness clan fights on an online war board.",
 	tags = {"clan", "war", "pvp", "cwa", "wilderness"}
 )
 public class ClanWarBoardPlugin extends Plugin

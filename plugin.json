@@ -1,7 +1,7 @@
 {
   "name": "Clan War Board",
   "version": "1.0.0",
-  "description": "Lets clan leaders set up wilderness fights while members see the current war board.",
+  "description": "Lets OSRS clans arrange CWA and Wilderness fights on an online war board.",
   "author": "Oyama",
   "tags": [
     "osrs",
@@ -9,6 +9,7 @@
     "clan",
     "war",
     "pvp",
+    "cwa",
     "wilderness"
   ],
   "min_engine_version": "3.0.0"
