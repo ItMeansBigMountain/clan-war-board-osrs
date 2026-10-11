@@ -26,6 +26,15 @@ Fight details use in-panel back navigation, so returning from a detail page keep
 
 The create form validates ISO-8601 UTC time, duration, combat range, world, and private location before submission. Validation is shown inline without clearing the entered terms, and only one create/challenge request may be active at once.
 
+The form includes mode-scoped presets:
+
+- **CWA Knockout** — no returns; last clan standing.
+- **CWA First to kills** — leaders lock the target in the agreed rules.
+- **Wildy Timed TDM** — timed, returns-enabled team score confirmed by both leaders.
+- **Wildy KOTH** — leader-agreed multi-area boundaries and leader-confirmed hill score.
+
+Presets are terms templates, not automatic combat trackers. The plugin does not observe opponents, crowdsource locations, infer kills, or automatically score TDM/KOTH. Both leaders must confirm the result. If a future preset cannot work without RuneLite-prohibited PvP tracking, it will be redesigned as a planning/result-confirmation workflow or removed rather than weakening compliance.
+
 No fights or clans are fabricated. Empty service collections produce explicit empty states.
 
 ## Role handling

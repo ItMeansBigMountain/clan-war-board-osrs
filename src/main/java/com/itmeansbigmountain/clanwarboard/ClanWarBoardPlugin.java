@@ -133,6 +133,18 @@ public class ClanWarBoardPlugin extends Plugin
 			}
 
 			@Override
+			public void submitAvailability(FightMode mode, GameModePreset preset, String startsAt, String duration, String combatMin, String combatMax, String notes)
+			{
+				ClanWarBoardPlugin.this.submitAvailability(mode, preset, startsAt, duration, combatMin, combatMax, notes);
+			}
+
+			@Override
+			public void submitChallenge(FightMode mode, GameModePreset preset, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+			{
+				ClanWarBoardPlugin.this.submitChallenge(mode, preset, opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+			}
+
+			@Override
 			public void submitChallengeAction(String challengeId, String action, String reason)
 			{
 				ClanWarBoardPlugin.this.submitChallengeAction(challengeId, action, reason);
@@ -462,6 +474,11 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void submitAvailability(FightMode mode, String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
+		submitAvailability(mode, GameModePreset.forMode(mode).get(0), startsAt, duration, combatMin, combatMax, notes);
+	}
+
+	private void submitAvailability(FightMode mode, GameModePreset preset, String startsAt, String duration, String combatMin, String combatMax, String notes)
+	{
 		ClanWarBoardSession current = session;
 		String actionContext = sessionContext;
 		long actionGeneration = sessionGeneration;
@@ -486,7 +503,7 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				try
 				{
-					apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(mode, startsAt, duration, combatMin, combatMax, notes));
+					apiClient.postAvailability(current, ClanWarBoardApiClient.availabilityJson(mode, preset, startsAt, duration, combatMin, combatMax, notes));
 					completeActionIfCurrent(current, actionContext, actionGeneration, "War post published to the board.", Color.GREEN, true);
 				}
 				catch (IOException ex)
@@ -508,6 +525,11 @@ public class ClanWarBoardPlugin extends Plugin
 
 	private void submitChallenge(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
 	{
+		submitChallenge(mode, GameModePreset.forMode(mode).get(0), opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+	}
+
+	private void submitChallenge(FightMode mode, GameModePreset preset, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	{
 		ClanWarBoardSession current = session;
 		String actionContext = sessionContext;
 		long actionGeneration = sessionGeneration;
@@ -532,7 +554,7 @@ public class ClanWarBoardPlugin extends Plugin
 			{
 				try
 				{
-					apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(mode, opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
+					apiClient.postChallenge(current, ClanWarBoardApiClient.challengeJson(mode, preset, opponent, startsAt, duration, combatMin, combatMax, world, location, rules));
 					completeActionIfCurrent(current, actionContext, actionGeneration, "Private challenge sent.", Color.GREEN, true);
 				}
 				catch (IOException ex)

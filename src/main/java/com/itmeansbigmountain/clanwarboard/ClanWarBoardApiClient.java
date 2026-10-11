@@ -169,9 +169,16 @@ final class ClanWarBoardApiClient
 
 	static String availabilityJson(FightMode mode, String startsAt, String duration, String combatMin, String combatMax, String notes)
 	{
+		return availabilityJson(mode, GameModePreset.forMode(mode).get(0), startsAt, duration, combatMin, combatMax, notes);
+	}
+
+	static String availabilityJson(FightMode mode, GameModePreset preset, String startsAt, String duration, String combatMin, String combatMax, String notes)
+	{
+		GameModePreset selected = requirePreset(mode, preset);
 		return "{\"startsAt\":\"" + jsonEscape(startsAt) + "\",\"durationMinutes\":" + number(duration, "30") +
 			",\"combatMin\":" + number(combatMin, "70") + ",\"combatMax\":" + number(combatMax, "126") +
-			",\"mode\":\"" + mode.apiValue() + "\",\"notes\":\"" + jsonEscape(notes) + "\"}";
+			",\"mode\":\"" + mode.apiValue() + "\",\"gamePreset\":\"" + selected.apiValue() +
+			"\",\"notes\":\"" + jsonEscape(notes) + "\"}";
 	}
 
 	static String challengeJson(String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
@@ -181,12 +188,28 @@ final class ClanWarBoardApiClient
 
 	static String challengeJson(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
 	{
+		return challengeJson(mode, GameModePreset.forMode(mode).get(0), opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+	}
+
+	static String challengeJson(FightMode mode, GameModePreset preset, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+	{
+		GameModePreset selected = requirePreset(mode, preset);
 		return "{\"opponentClanId\":\"" + jsonEscape(opponent) + "\",\"terms\":{" +
 			"\"location\":\"" + jsonEscape(location) + "\",\"world\":" + number(world, "0") +
 			",\"startsAt\":\"" + jsonEscape(startsAt) + "\",\"combatMin\":" + number(combatMin, "70") +
 			",\"combatMax\":" + number(combatMax, "126") + ",\"durationMinutes\":" + number(duration, "30") +
-			",\"mode\":\"" + mode.apiValue() + "\",\"returnsAllowed\":" + mode.isReturnsAllowed() +
+			",\"mode\":\"" + mode.apiValue() + "\",\"gamePreset\":\"" + selected.apiValue() +
+			"\",\"returnsAllowed\":" + mode.isReturnsAllowed() +
 			",\"rules\":\"" + jsonEscape(rules) + "\"}}";
+	}
+
+	private static GameModePreset requirePreset(FightMode mode, GameModePreset preset)
+	{
+		if (mode == null || preset == null || preset.getMode() != mode)
+		{
+			throw new IllegalArgumentException("Game preset must match fight mode");
+		}
+		return preset;
 	}
 
 	private List<WarBoardFight> parseFights(String json, String collection)

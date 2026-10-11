@@ -13,6 +13,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -34,6 +35,14 @@ class ClanWarBoardPanel extends PluginPanel
 		default void submitChallenge(FightMode mode, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
 		{
 			submitChallenge(opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
+		}
+		default void submitAvailability(FightMode mode, GameModePreset preset, String startsAt, String duration, String combatMin, String combatMax, String notes)
+		{
+			submitAvailability(mode, startsAt, duration, combatMin, combatMax, notes);
+		}
+		default void submitChallenge(FightMode mode, GameModePreset preset, String opponent, String startsAt, String duration, String combatMin, String combatMax, String world, String location, String rules)
+		{
+			submitChallenge(mode, opponent, startsAt, duration, combatMin, combatMax, world, location, rules);
 		}
 		default void submitChallengeAction(String challengeId, String action, String reason) { }
 	}
@@ -479,15 +488,25 @@ class ClanWarBoardPanel extends PluginPanel
 		content.add(formError);
 		JTextField opponent = field(privateOpponent);
 		JTextField startsAt = field("");
-		JTextField duration = field("30");
+		java.util.List<GameModePreset> availablePresets = GameModePreset.forMode(mode);
+		GameModePreset initialPreset = availablePresets.get(0);
+		JComboBox<GameModePreset> preset = new JComboBox<>(availablePresets.toArray(new GameModePreset[0]));
+		preset.setAlignmentX(Component.LEFT_ALIGNMENT);
+		preset.setMaximumSize(new Dimension(CONTENT_WIDTH, 28));
+		JTextField duration = field(initialPreset.getDefaultDuration());
 		JTextField combatMin = field("70");
 		JTextField combatMax = field("126");
 		JTextField world = field("");
-		JTextField location = field(mode == FightMode.CWA ? "Clan Wars Arena" : "");
-		JTextField rules = field("");
+		JTextField location = field(initialPreset.getDefaultLocation());
+		JTextField rules = field(initialPreset.getRulesTemplate());
 		content.add(label("Basics", 13, Font.BOLD, TEXT));
 		content.add(Box.createVerticalStrut(5));
 		addField("Opponent clan (blank for public post)", opponent);
+		content.add(wrapped("Game mode preset", 11, TEXT));
+		content.add(preset);
+		content.add(Box.createVerticalStrut(6));
+		content.add(wrapped("Presets lock terms only. Scores/results are confirmed by both leaders; no opponent or location tracking is performed.", 10, MUTED));
+		content.add(Box.createVerticalStrut(6));
 		addField("Start time (ISO-8601, UTC)", startsAt);
 		addField("Duration minutes", duration);
 		addField("Combat minimum", combatMin);
@@ -498,6 +517,15 @@ class ClanWarBoardPanel extends PluginPanel
 		addField("World (private challenge)", world);
 		addField("Location (private challenge)", location);
 		addField("Rules / notes", rules);
+		preset.addActionListener(event -> {
+			GameModePreset selected = (GameModePreset) preset.getSelectedItem();
+			if (selected != null)
+			{
+				duration.setText(selected.getDefaultDuration());
+				location.setText(selected.getDefaultLocation());
+				rules.setText(selected.getRulesTemplate());
+			}
+		});
 		JButton submit = new JButton(privateOpponent.isEmpty() ? "Post to War Board" : "Send private challenge");
 		submit.setAlignmentX(Component.LEFT_ALIGNMENT);
 		submit.setMaximumSize(new Dimension(CONTENT_WIDTH, 34));
@@ -520,11 +548,11 @@ class ClanWarBoardPanel extends PluginPanel
 			formError.setVisible(false);
 			if (opponent.getText().trim().isEmpty())
 			{
-				actionHandler.submitAvailability(mode, startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), rules.getText());
+				actionHandler.submitAvailability(mode, (GameModePreset) preset.getSelectedItem(), startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), rules.getText());
 			}
 			else
 			{
-				actionHandler.submitChallenge(mode, opponent.getText(), startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), world.getText(), location.getText(), rules.getText());
+				actionHandler.submitChallenge(mode, (GameModePreset) preset.getSelectedItem(), opponent.getText(), startsAt.getText(), duration.getText(), combatMin.getText(), combatMax.getText(), world.getText(), location.getText(), rules.getText());
 			}
 		});
 		content.add(submit);

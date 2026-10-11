@@ -428,6 +428,25 @@ public class ClanWarBoardPluginTest
 	}
 
 	@Test
+	public void compliantPresetsAreModeScopedAndSerializedAsLockedTerms()
+	{
+		assertEquals(java.util.Arrays.asList(GameModePreset.CWA_KNOCKOUT, GameModePreset.CWA_FIRST_TO_KILLS),
+			GameModePreset.forMode(FightMode.CWA));
+		assertEquals(java.util.Arrays.asList(GameModePreset.WILDY_TDM, GameModePreset.WILDY_KOTH),
+			GameModePreset.forMode(FightMode.WILDY));
+		assertFalse(GameModePreset.WILDY_TDM.isAutomaticScoring());
+		assertFalse(GameModePreset.WILDY_KOTH.isAutomaticScoring());
+
+		String cwa = ClanWarBoardApiClient.challengeJson(FightMode.CWA, GameModePreset.CWA_KNOCKOUT,
+			"Rivals", "2026-08-20T20:00:00Z", "30", "70", "126", "330", "Clan Wars Arena", "Matched opts");
+		String wildy = ClanWarBoardApiClient.challengeJson(FightMode.WILDY, GameModePreset.WILDY_KOTH,
+			"Rivals", "2026-08-20T20:00:00Z", "20", "70", "126", "330", "Chaos Temple", "Leader-confirmed score");
+		assertTrue(cwa.contains("\"gamePreset\":\"cwa_knockout\""));
+		assertTrue(wildy.contains("\"gamePreset\":\"wildy_koth\""));
+		assertFalse(wildy.contains("telemetry"));
+	}
+
+	@Test
 	public void mockWebServerAcceptsReorderedAvailabilityAndRejectsMalformedOrEmptyResponses() throws Exception
 	{
 		try (MockWebServer server = new MockWebServer())
